@@ -376,18 +376,20 @@
                     const wrapper = container.querySelector('.list-string-items-wrapper');
                     const currentName = button.dataset.currentName;
                     
+                    // Built with DOM APIs: the attribute name comes from the payload
+                    // and must never be parsed as HTML.
                     const newItem = document.createElement('div');
                     newItem.className = 'list-string-item flex items-center gap-2';
-                    newItem.innerHTML = `
-                        <input type="text" 
-                            name="${currentName}[]" 
-                            class="flex-1 p-3 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-indigo-500"
-                            placeholder="Enter value">
-                        <button type="button" 
-                            class="remove-string-item text-red-500 hover:text-red-700 px-3 py-2">
-                            &times;
-                        </button>
-                    `;
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.name = `${currentName}[]`;
+                    input.className = 'flex-1 p-3 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-indigo-500';
+                    input.placeholder = 'Enter value';
+                    const removeItemBtn = document.createElement('button');
+                    removeItemBtn.type = 'button';
+                    removeItemBtn.className = 'remove-string-item text-red-500 hover:text-red-700 px-3 py-2';
+                    removeItemBtn.textContent = '\u00d7';
+                    newItem.append(input, removeItemBtn);
                     wrapper.appendChild(newItem);
                 }
 
@@ -456,7 +458,14 @@
                         const labelText = name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
                         const label = document.createElement('label');
                         label.className = 'flex items-center cursor-pointer p-2 rounded-md hover:bg-gray-100';
-                        label.innerHTML = `<input type="checkbox" class="h-5 w-5 text-indigo-600 border-gray-400 rounded" value="${name}"><span class="ml-3 text-lg text-gray-800">${labelText}</span>`;
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.className = 'h-5 w-5 text-indigo-600 border-gray-400 rounded';
+                        checkbox.value = name;
+                        const text = document.createElement('span');
+                        text.className = 'ml-3 text-lg text-gray-800';
+                        text.textContent = labelText;
+                        label.append(checkbox, text);
                         checkboxListContainer.appendChild(label);
                     });
                     modal.classList.remove('hidden');
@@ -472,7 +481,7 @@
                 addAttributesBtn.addEventListener('click', function () {
                     checkboxListContainer.querySelectorAll('input:checked').forEach(checkbox => {
                         const name = checkbox.value;
-                        const blockToMove = hiddenStorage.querySelector(`[data-attr-name="${name}"]`);
+                        const blockToMove = hiddenStorage.querySelector(`[data-attr-name="${CSS.escape(name)}"]`);
                         if (blockToMove) {
                             const removeBtn = document.createElement('button');
                             removeBtn.type = 'button';

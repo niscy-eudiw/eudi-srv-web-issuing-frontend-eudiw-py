@@ -69,18 +69,17 @@ $('#check').change(function() {
 
 </script>
 
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script>
 
-var presentation_id= '{{presentation_id}}'
+var presentation_id = {{ presentation_id | tojson }};
 function Ajax_request() {
     $.ajax({
-        url: '{{redirect_url}}pid_authorization',
+        url: {{ (redirect_url ~ 'pid_authorization') | tojson }},
         method: 'GET',
         data:{"presentation_id": presentation_id },
         success: function(response) {
             console.log('Success:', response);
-            window.location.replace("{{redirect_url}}revocation/getoid4vp?presentation_id=" + presentation_id);
+            window.location.replace({{ (redirect_url ~ 'revocation/getoid4vp') | tojson }} + "?presentation_id=" + encodeURIComponent(presentation_id));
             clearInterval(intervalId);
             
         },

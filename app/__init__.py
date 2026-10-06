@@ -22,8 +22,6 @@ Its main goal is to issue the PID in cbor/mdoc (ISO 18013-5 mdoc) and SD-JWT for
 This __init__.py serves double duty: it will contain the application factory, and it tells Python that the flask directory should be treated as a package.
 """
 
-import copy
-import json
 import os
 import sys
 import logging
@@ -37,11 +35,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from flask import Flask, jsonify, render_template, send_from_directory
-from flask_session import Session
 from flask_cors import CORS
 from werkzeug.debug import *
 from werkzeug.exceptions import HTTPException
-from typing import Dict, Any, List, Union, cast
+from typing import Dict, Any
 
 from app.app_config.logging_config import configure_logging
 
@@ -107,6 +104,40 @@ def page_not_found(e):
 from typing import Optional
 
 
+#: Script origins the templates load from, besides this frontend.
+_SCRIPT_ORIGINS = ("https://webgate.ec.europa.eu",)
+
+
+def _content_security_policy() -> str:
+    """Builds the Content-Security-Policy of every page.
+
+    Forms may only post to this frontend and the backend. Inline scripts are
+    still allowed because the templates use inline event handlers; every
+    payload value that reaches a page is validated in :mod:`app.frontend`.
+    """
+    backends = " ".join(
+        sorted({_origin(url) for url in [CONFIGURATION["backend_url"], *(CONFIGURATION.get("backend_origins") or [])]})
+    )
+    return (
+        "default-src 'self'; "
+        f"script-src 'self' 'unsafe-inline' {' '.join(_SCRIPT_ORIGINS)}; "
+        "style-src 'self' 'unsafe-inline' https:; "
+        "font-src 'self' data: https:; "
+        "img-src 'self' data:; "
+        f"connect-src 'self' {backends}; "
+        f"form-action 'self' {backends}; "
+        "frame-ancestors 'none'; base-uri 'none'; object-src 'none'"
+    )
+
+
+def _origin(url: str) -> str:
+    """Returns ``scheme://host[:port]`` of a URL."""
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
 def create_app(test_config=None):
     # create and configure the app
     app = Flask(__name__, instance_relative_config=True)
@@ -136,8 +167,6 @@ def create_app(test_config=None):
     def logo():
         return send_from_directory("static/images", "ic-logo.png")
 
-    app.config.from_mapping(SECRET_KEY="dev")
-
     if test_config is None:
         # load the instance config (in instance directory), if it exists, when not testing
         app.config.from_pyfile("config.py", silent=True)
@@ -157,178 +186,72 @@ def create_app(test_config=None):
     app.register_blueprint(frontend.frontend)
     app.register_blueprint(auth_redirect.authorization_endpoint)
 
-    # config session
-    app.config["SESSION_FILE_THRESHOLD"] = 50
-    app.config["SESSION_PERMANENT"] = False
-    app.config["SESSION_TYPE"] = "filesystem"
-    app.config.update(SESSION_COOKIE_SAMESITE="None", SESSION_COOKIE_SECURE=True)
-    Session(app)
+    # The frontend keeps no session (no cookie, no SECRET_KEY). Only the
+    # public metadata may be read cross-origin, without credentials.
+    CORS(app, resources={r"/.well-known/*": {"origins": "*"}}, supports_credentials=False, send_wildcard=True)
 
-    # CORS is a mechanism implemented by browsers to block requests from domains other than the server's one.
-    CORS(app, supports_credentials=True)
+    content_security_policy = _content_security_policy()
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("Content-Security-Policy", content_security_policy)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        return response
 
     app.logger.info(" - DEBUG - FLASK started")
 
     return app
 
 
-def replace_domain(
-    obj: Union[Dict[str, Any], List[Any], str, Any], old: str, new: str
-) -> Union[Dict[str, Any], List[Any], str, Any]:
-    if isinstance(obj, dict):
-        return {k: replace_domain(v, old, new) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [replace_domain(i, old, new) for i in obj]
-    elif isinstance(obj, str):
-        return obj.replace(old, new)
-    else:
-        return obj
+METADATA_TIMEOUT = 10
+
+
+def _fetch_backend_metadata(path: str) -> Dict[str, Any]:
+    """GETs a ``/metadata`` document of this frontend from the backend.
+
+    Args:
+        path: Path after ``/metadata/<frontend_id>`` (``""`` or ``"/signed"``).
+
+    Returns:
+        The decoded JSON body.
+    """
+    url = f"{CONFIGURATION['backend_url']}/metadata/{CONFIGURATION['frontend_id']}{path}"
+    response = requests.get(
+        url,
+        headers={"X-Api-Key": CONFIGURATION["backend_api_key"]},
+        timeout=METADATA_TIMEOUT,
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 def setup_metadata():
-    global oidc_metadata
-    global oidc_metadata_clean
-    global openid_metadata
-    global oauth_metadata
+    """Loads this frontend's metadata (unsigned and signed) from the backend.
+
+    The backend builds the documents from ``frontends_config.<frontend_id>``
+    (``url``, ``credentials_supported``, ``oauth_url``). The dicts are updated
+    in place so modules that imported them keep a valid reference.
+    """
     global signed_metadata
 
-    credentials_supported: Dict[str, Any] = {}
-    credential_request_encryption = None
-    issuer_info = None
-
     try:
-        dir_path = os.path.dirname(os.path.realpath(__file__))
-
-        with open(dir_path + "/metadata_config/openid-configuration.json") as f:
-            openid_metadata = json.load(f)
-
-        with open(dir_path + "/metadata_config/oauth-authorization-server.json") as f:
-            oauth_metadata = json.load(f)
-
-        with open(dir_path + "/metadata_config/metadata_config.json") as metadata:
-            oidc_metadata = json.load(metadata)
-            oidc_metadata_clean = copy.deepcopy(oidc_metadata)
-
-        metadata_endpoint = (
-            f"{CONFIGURATION['backend_url']}/.well-known/openid-credential-issuer"
-        )
-
-        try:
-            response = requests.get(metadata_endpoint)
-            response.raise_for_status()
-
-            data = response.json()
-
-            credentials_supported = data.get("credential_configurations_supported", {})
-
-            credential_request_encryption = data.get("credential_request_encryption")
-            if credential_request_encryption:
-                logger.info(
-                    "credential_request_encryption fetched from backend: %s",
-                    json.dumps(credential_request_encryption, indent=2),
-                )
-            else:
-                logger.warning(
-                    "credential_request_encryption not found in backend metadata"
-                )
-
-            issuer_info = data.get("issuer_info")
-            if issuer_info:
-                logger.info(
-                    "issuer_info fetched from backend: %s",
-                    json.dumps(issuer_info, indent=2),
-                )
-            else:
-                logger.warning("issuer_info not found in backend metadata")
-
-            if (
-                CONFIGURATION["credentials_supported"]
-                and CONFIGURATION["credentials_supported"] != ["*"]
-                and CONFIGURATION["credentials_supported"] != "*"
-            ):
-                allowed_credentials = set(CONFIGURATION["credentials_supported"])
-                credentials_supported = {
-                    k: v
-                    for k, v in credentials_supported.items()
-                    if k in allowed_credentials
-                }
-
-        except Exception:
-            for file in os.listdir(
-                dir_path + "/metadata_config/credentials_supported/"
-            ):
-                if file.endswith("json"):
-                    json_path = os.path.join(
-                        dir_path + "/metadata_config/credentials_supported/", file
-                    )
-                    with open(json_path, encoding="utf-8") as json_file:
-                        credential = json.load(json_file)
-                        credentials_supported.update(credential)
-
-    except FileNotFoundError as e:
-        logger.exception(f"Metadata Error: file not found. \n{e}")
-        raise
-    except json.JSONDecodeError as e:
-        logger.exception(f"Metadata Error: Metadata Unable to decode JSON. \n{e}")
-        raise
-    except Exception as e:
-        logger.exception(f"Metadata Error: An unexpected error occurred. \n{e}")
+        documents = _fetch_backend_metadata("")
+        signed = _fetch_backend_metadata("/signed")["signed_metadata"]
+    except Exception:
+        logger.exception("Metadata Error: unable to load metadata from the backend")
         raise
 
-    oidc_metadata["credential_configurations_supported"] = credentials_supported
+    oidc_metadata.clear()
+    oidc_metadata.update(documents["openid_credential_issuer"])
+    openid_metadata.clear()
+    openid_metadata.update(documents["openid_configuration"])
+    oauth_metadata.clear()
+    oauth_metadata.update(documents["oauth_authorization_server"])
+    signed_metadata = signed
 
-    if credential_request_encryption:
-        oidc_metadata["credential_request_encryption"] = credential_request_encryption
-        logger.info("credential_request_encryption set on oidc_metadata")
-
-    if issuer_info:
-        oidc_metadata["issuer_info"] = issuer_info
-        logger.info("issuer_info set on oidc_metadata")
-
-    old_domain = oidc_metadata["credential_issuer"]
-    new_domain = CONFIGURATION["backend_url"]
-
-    oidc_domain = CONFIGURATION["oauth_url"]
-
-    openid_metadata = cast(
-        Dict[str, Any],
-        replace_domain(openid_metadata, f"{old_domain}/oidc", oidc_domain),
+    logger.info(
+        "Metadata loaded from the backend: %d credential configurations",
+        len(oidc_metadata.get("credential_configurations_supported", {})),
     )
-
-    oauth_metadata = cast(
-        Dict[str, Any], replace_domain(oauth_metadata, old_domain, new_domain)
-    )
-
-    oidc_metadata = cast(
-        Dict[str, Any], replace_domain(oidc_metadata, old_domain, new_domain)
-    )
-
-    openid_metadata["issuer"] = CONFIGURATION["service_url"]
-    openid_metadata["pushed_authorization_request_endpoint"] = (
-        f"{CONFIGURATION['service_url']}/pushed_authorization"
-    )
-    oidc_metadata["credential_issuer"] = CONFIGURATION["service_url"]
-    oidc_metadata["display"][0]["logo"][
-        "uri"
-    ] = f"{CONFIGURATION['service_url']}/ic-logo.png"
-
-    metadata_signing_endpoint = (
-        f"{CONFIGURATION['backend_url']}/metadata/metadata_signer"
-    )
-
-    payload = {
-        "metadata": oidc_metadata,
-        "issuer_frontend_id": CONFIGURATION["frontend_id"],
-        "iss": CONFIGURATION["service_url"],
-    }
-
-    response = requests.post(
-        metadata_signing_endpoint,
-        json=payload,
-        headers={"Content-Type": "application/json"},
-        timeout=10,
-    )
-
-    response.raise_for_status()
-
-    signed_metadata = response.json()["signed_metadata"]
