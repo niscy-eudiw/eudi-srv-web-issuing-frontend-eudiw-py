@@ -232,6 +232,19 @@ class TestParProxy:
         failure = client.post("/pushed_authorization", data={"client_id": "w"})
         assert failure.status_code == 502 and "secret internal host" not in failure.get_data(as_text=True)
 
+    def test_wallet_values_are_not_logged(self, client, monkeypatch, caplog):
+        """The client_id was written to the log (SonarCloud: log injection)."""
+        import logging
+        from unittest import mock
+
+        import requests
+
+        upstream = mock.Mock(status_code=201, content=b'{"request_uri":"u"}', headers={})
+        monkeypatch.setattr(requests, "post", mock.Mock(return_value=upstream))
+        with caplog.at_level(logging.DEBUG):
+            client.post("/pushed_authorization", data={"client_id": "w\r\nFORGED log line"})
+        assert "FORGED" not in caplog.text
+
 
 class TestReferrerPolicy:
     """Pages post forms to the backend, whose CSRF check needs the Origin header.

@@ -162,7 +162,12 @@ def _check_backend_url() -> None:
 
 
 def create_app(test_config=None):
-    # create and configure the app
+    # No CSRF protection, by design (SonarCloud S4502 reviewed as safe): there
+    # is no cookie, session or SECRET_KEY, so a cross-site request carries no
+    # credentials. The POST routes render pages from what is posted (the
+    # backend's auto-submitting pages post to them from another origin; the
+    # data is authenticated by payload_key), and /pushed_authorization is a
+    # wallet API authenticated by the wallet attestation headers.
     app = Flask(__name__, instance_relative_config=True)
     app.config["MAX_CONTENT_LENGTH"] = int(CONFIGURATION.get("max_content_length", DEFAULT_MAX_CONTENT_LENGTH))
 
@@ -216,7 +221,8 @@ def create_app(test_config=None):
     app.register_blueprint(auth_redirect.authorization_endpoint)
 
     # The frontend keeps no session (no cookie, no SECRET_KEY). Only the
-    # public metadata may be read cross-origin, without credentials.
+    # public metadata may be read cross-origin, without credentials: browser
+    # based wallets and verifiers fetch it (SonarCloud S5122 reviewed as safe).
     CORS(app, resources={r"/.well-known/*": {"origins": "*"}}, supports_credentials=False, send_wildcard=True)
 
     @app.context_processor

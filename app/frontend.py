@@ -302,14 +302,12 @@ def _invalid_payload(e: InvalidPayload):
 def _unauthenticated_payload(e: UnauthenticatedPayload):
     logger.warning("Rejected %s: %s", _route(), e)
     # Generic page: nothing from the request is shown.
-    return (
-        render_template(
-            "misc/500.html",
-            error="The request could not be verified. Please start again from the beginning.",
-            error_code="Bad Request",
-        ),
-        400,
+    page = render_template(
+        "misc/500.html",
+        error="The request could not be verified. Please start again from the beginning.",
+        error_code="Bad Request",
     )
+    return page, 400
 
 
 @frontend.route("/display_auth_method", methods=["POST"])

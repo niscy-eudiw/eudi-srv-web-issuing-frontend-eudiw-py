@@ -41,7 +41,7 @@
 {# It's a nested dictionary (like place_of_birth) #}
 {% if value is mapping %}
 <div class="attribute-block">
-    <label class="font-pf block font-bold text-custom-gray">{{ name | replace('_', ' ') | title }}</label>
+    <p class="font-pf block font-bold text-custom-gray">{{ name | replace('_', ' ') | title }}</p>
     <div class="mt-2 pl-4 border-l-2 border-gray-400 space-y-3">
         {% for sub_name, sub_value in value.items() %}
             {{ render_attribute_display(sub_name, sub_value) }}
@@ -52,7 +52,7 @@
 {# It's a list of items (like nationalities, driving_privileges) #}
 {% elif value is sequence and value is not string %}
 <div class="attribute-block">
-    <label class="font-pf block font-bold text-custom-gray">{{ name | replace('_', ' ') | title }}</label>
+    <p class="font-pf block font-bold text-custom-gray">{{ name | replace('_', ' ') | title }}</p>
     <div class="mt-2 pl-4 border-l-2 border-gray-400 space-y-3">
         {% for item in value %}
         <div class="bg-white/60 p-3 rounded-md">
@@ -71,14 +71,14 @@
 {# It's an image #}
 {% elif name in ["portrait", "issuing_authority_logo", "signature_usual_mark_issuing_officer", "image"] %}
 <div class="attribute-block">
-    <label class="block text-base font-bold text-custom-gray">{{ name | title }}</label>
-    <img class="mt-1 rounded-lg shadow-md w-32 h-32 object-cover" src="data:image/jpeg;base64,{{ value }}">
+    <p class="block text-base font-bold text-custom-gray">{{ name | title }}</p>
+    <img class="mt-1 rounded-lg shadow-md w-32 h-32 object-cover" src="data:image/jpeg;base64,{{ value }}" alt="{{ name | replace('_', ' ') | title }}">
 </div>
 
 {# It's a simple value (string, number, etc.) #}
 {% else %}
 <div class="attribute-block">
-    <label class="font-pf block font-bold text-custom-gray">{{ name | replace('_', ' ') | title }}</label>
+    <p class="font-pf block font-bold text-custom-gray">{{ name | replace('_', ' ') | title }}</p>
     <p class="font-pf text-base text-custom-gray mt-1">{{ value }}</p>
 </div>
 {% endif %}

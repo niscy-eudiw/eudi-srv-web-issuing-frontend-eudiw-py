@@ -32,7 +32,7 @@
         <header role="banner" class="main-header">
             <div class="container">
                 <div class="row">
-                    <img src="{{url_for('static', filename='ic-logo.svg')}}">
+                    <img src="{{url_for('static', filename='ic-logo.svg')}}" alt="EUDI Wallet logo">
                 </div>
             </div>
         </header>
@@ -50,7 +50,7 @@
                                     <h4>{{credential_type}}</h4>
                                     {% for credential_id in cred[credential_type] %}
                                         <div class="form-check col-md-12">
-                                            <label class="form-check-label" for="flexCheckDefault">
+                                            <label class="form-check-label">
                                                 <input class="form-check-input" id="check" type="checkbox" name="{{ credential_id }}" value="{{ credential_id }}"  style="transform: scale(1.8);">
                                                 {{ cred[credential_type][credential_id]}}
                                             </label>
@@ -60,13 +60,13 @@
                             <div class="clearfix"></div>
 
                             <span class="more-submit">
-                                <input type="submit" name="proceed" accesskey="S" value="Submit" class="btn btn-primary" title="Submit" id="btncheck" disabled />
-                                <input type="button" name="Cancelled" accesskey="C" value="Cancel" id="cancelBtnId" class="btn btn-cancel btn-alternate cancellable" title="Cancel" data-action="home" />
+                                <input type="submit" name="proceed" value="Submit" class="btn btn-primary" title="Submit" id="btncheck" disabled />
+                                <input type="button" name="Cancelled" value="Cancel" id="cancelBtnId" class="btn btn-cancel btn-alternate cancellable" title="Cancel" data-action="home" />
                             </span>
                         </form>
                         
                     </div>
-                    <h2 id="validation-message"></h2>
+                    <div id="validation-message" class="h2" role="status" aria-live="polite"></div>
 
                 </div>
             </div>

@@ -49,6 +49,8 @@ _06 Oct 2026_
 ## [Unreleased]
 
 ### Changed
+- SonarCloud reliability: the PAR relay reads wallet headers with `.get()` and returns a `Response` on every path (it mixed 3- and 2-tuples); the unauthenticated-payload handler returns its 400 as a plain `(page, 400)` tuple. Templates: labels tied to their controls, `alt` text on images, no `accesskey`, headings with accessible text.
+- The PAR relay no longer logs the wallet's `client_id` (SonarCloud log injection; the authorization server logs the authenticated client). Comments at `create_app` and the CORS setup record why the CSRF (S4502) and CORS (S5122) hotspots are safe.
 - `requests` 2.32.3 → 2.34.2 (PYSEC-2026-1872, PYSEC-2026-2275), `werkzeug` 3.1.6 → 3.1.9 (CVE-2026-102598), `Flask-Cors` 6.0.2 → 6.0.5, matching the backend.
 - Removed requirements nothing imports: `Flask-Session`, `flask_api`, `validators`, `jsonschema` and `config`.
 - Display payloads can be authenticated: with the new `payload_key` configuration the `/display_*` pages and `/internal_error` require `payload_jwt`, an HS256 JWT from the backend (claims `payload`, `aud` = `frontend_id`, `iat`, `exp`, lifetime at most 300 s, 60 s clock skew), and use its `payload` claim; the plain `payload` field is ignored. A missing or invalid token gets `400` with a generic page. Without `payload_key` a warning is logged at start-up.

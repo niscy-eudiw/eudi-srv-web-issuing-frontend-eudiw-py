@@ -10,7 +10,7 @@ wallet (with ``trusted_proxies: 1``). The request size is capped by
 import logging
 
 import requests
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 from werkzeug.exceptions import HTTPException
 
 from app import CONFIGURATION
@@ -45,10 +45,13 @@ def pushed_authorization():
             "X-Forwarded-For": request.remote_addr,
         }
         for header_name in FORWARDED_REQUEST_HEADERS:
-            if header_name in request.headers:
-                forward_headers[header_name] = request.headers[header_name]
+            value = request.headers.get(header_name)
+            if value is not None:
+                forward_headers[header_name] = value
 
-        logger.info(f"Relaying pushed authorization request for client {body.get('client_id')!r}")
+        # No wallet-supplied value in the log (log injection); the authorization
+        # server logs the client after authenticating it.
+        logger.info("Relaying pushed authorization request")
         response = requests.post(
             f"{CONFIGURATION['oauth_url']}/pushed_authorization",
             data=body,
@@ -57,14 +60,21 @@ def pushed_authorization():
         )
 
         headers = [(name, response.headers[name]) for name in RELAYED_RESPONSE_HEADERS if name in response.headers]
-        return response.content, response.status_code, headers
+        return Response(response.content, status=response.status_code, headers=headers)
 
     except HTTPException:
         # e.g. 413 from MAX_CONTENT_LENGTH while reading the body.
         raise
     except requests.exceptions.RequestException:
         logger.exception("Pushed authorization request relay failed")
-        return jsonify({"error": "temporarily_unavailable", "error_description": "Authorization server unreachable"}), 502
+        return _error({"error": "temporarily_unavailable", "error_description": "Authorization server unreachable"}, 502)
     except Exception:
         logger.exception("Pushed authorization request relay error")
-        return jsonify({"error": "server_error"}), 500
+        return _error({"error": "server_error"}, 500)
+
+
+def _error(body: dict, status: int) -> Response:
+    """A JSON error response (every return of the relay is a Response)."""
+    response = jsonify(body)
+    response.status_code = status
+    return response
