@@ -1,13 +1,17 @@
 """Pushed authorization request proxy.
 
 Wallets send the PAR to the credential issuer (this frontend); it is relayed
-to the authorization server with the frontend id added.
+to the authorization server with the frontend id added, and with the wallet's
+address in ``X-Forwarded-For`` so the authorization server can rate-limit per
+wallet (with ``trusted_proxies: 1``). The request size is capped by
+``MAX_CONTENT_LENGTH`` (``max_content_length``).
 """
 
 import logging
 
 import requests
 from flask import Blueprint, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 from app import CONFIGURATION
 
@@ -37,6 +41,8 @@ def pushed_authorization():
             "Accept": "application/json",
             "Accept-Charset": "UTF-8",
             "User-Agent": request.headers.get("User-Agent", "proxy-service"),
+            # The peer address only: a wallet-supplied X-Forwarded-For is not relayed.
+            "X-Forwarded-For": request.remote_addr,
         }
         for header_name in FORWARDED_REQUEST_HEADERS:
             if header_name in request.headers:
@@ -53,6 +59,9 @@ def pushed_authorization():
         headers = [(name, response.headers[name]) for name in RELAYED_RESPONSE_HEADERS if name in response.headers]
         return response.content, response.status_code, headers
 
+    except HTTPException:
+        # e.g. 413 from MAX_CONTENT_LENGTH while reading the body.
+        raise
     except requests.exceptions.RequestException:
         logger.exception("Pushed authorization request relay failed")
         return jsonify({"error": "temporarily_unavailable", "error_description": "Authorization server unreachable"}), 502

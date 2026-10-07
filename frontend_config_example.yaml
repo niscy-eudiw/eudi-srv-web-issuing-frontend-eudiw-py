@@ -1,11 +1,44 @@
-service_url: "https://issuer.eudiw.dev"
-log_dir: "/tmp/issuer_frontend/logs/logs.log"
+# frontend_config.yaml - EUDIW Issuer Front-end configuration.
+# Read from ISSUER_CONFIG_PATH (default /etc/issuer_config/frontend_config.yaml).
+# Keys shown commented out are optional; their default is the value shown.
+# Contains SECRETS (backend_api_key, payload_key): do not commit the real file.
 
+# Public base URL of this frontend, no trailing slash: the credential issuer
+# identifier advertised in the metadata. Required.
+service_url: "https://issuer.eudiw.dev"
+# Log file (its directory is created at start-up). Required.
+log_dir: "/tmp/issuer_frontend/logs/logs.log"
+# Log level (default "INFO"): DEBUG, INFO, WARNING, ERROR or CRITICAL.
+# log_level: "INFO"
+
+# Id of this frontend in the backend's frontend.frontends_config. Required:
+# the backend serves this frontend's metadata under it, and it is the aud of
+# signed display payloads.
 frontend_id: "5d725b3c-6d42-448e-8bfd-1eff1fcf152d"
 
+# Public base URL of the backend. Required; must be https (http only for
+# localhost, 127.0.0.1 or ::1), as the API key is sent to it. Pages only post
+# and navigate to this origin.
 backend_url: "https://backend.issuer.eudiw.dev"
 # Other public origins of the backend, if any (form posts are only accepted to these).
+# List of origins; default none.
 # backend_origins: ["https://backend2.issuer.eudiw.dev"]
+# Base URL of the authorization server (pushed authorization requests). Required.
 oauth_url: "https://issuer.eudiw.dev/oidc"
 
-backend_api_key: "change-me" # Must match backend_api_key in the backend config
+backend_api_key: "change-me" # Must match backend_api_key in the backend config. Required. SECRET.
+
+# Shared secret the backend signs display payloads with (payload_jwt, HS256); must
+# match the backend's key for this frontend. Without it the /display_* pages accept
+# unauthenticated payloads (a warning is logged at start-up).
+# Default unset. SECRET; at least 32 characters (the backend refuses shorter).
+# payload_key: "change-me"
+
+# Hosts an https wallet link on the QR code pages may point to (e.g. the wallet
+# tester, the backend's wallet_tester_url); the backend origin is always allowed.
+# List of host names; default none. Deep links (openid-credential-offer,
+# openid4vp, eudi-openid4vp, haip, mdoc-openid4vp) are always allowed.
+# wallet_https_hosts: ["tester.issuer.eudiw.dev"]
+
+# Maximum request body size in bytes (default 1 MiB).
+# max_content_length: 1048576

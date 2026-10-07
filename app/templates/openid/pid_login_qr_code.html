@@ -61,7 +61,7 @@
     </div>
     <!-- Version 9.7.1.20 - 23/03/2023 - 09:26 -->
 </body>
-<script>
+<script nonce="{{ csp_nonce() }}">
 
 $('#check').change(function() {
   $('#btncheck').prop("disabled", !this.checked);
@@ -69,17 +69,17 @@ $('#check').change(function() {
 
 </script>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 
 var presentation_id = {{ presentation_id | tojson }};
 function Ajax_request() {
     $.ajax({
-        url: {{ (redirect_url ~ 'pid_authorization') | tojson }},
+        url: {{ (backend_url ~ '/pid_authorization') | tojson }},
         method: 'GET',
         data:{"presentation_id": presentation_id },
         success: function(response) {
             console.log('Success:', response);
-            window.location.replace(location.origin + "/getpidoid4vp?presentation_id=" + encodeURIComponent(presentation_id));
+            window.location.replace({{ (backend_url ~ '/getpidoid4vp') | tojson }} + "?presentation_id=" + encodeURIComponent(presentation_id));
             clearInterval(intervalId);
             
         },

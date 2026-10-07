@@ -19,6 +19,7 @@
     <link href="{{ url_for('static', filename='css/tailwind.css') }}" rel="stylesheet">
     <title>Form for your EUDI Wallet</title>
 
+    <script type="text/javascript" src="{{ url_for('static', filename='scripts/page-actions.js') }}" charset="UTF-8" defer="true"></script>
 </head>
 
 {# =================================================================================== #}
@@ -252,7 +253,7 @@
             </div>
 
             <form id="selectCountryForm" method="post" class="flex flex-col h-full" action="{{redirect_url}}"
-                onsubmit="return submitValidation()" enctype="multipart/form-data">
+                enctype="multipart/form-data">
                 <div class="mt-10">
                     <h2 class="text-xl font-semibold text-gray-800 border-b pb-2 mb-6">Mandatory Information</h2>
                     {% for name, attr in mandatory_attributes.items() %}
@@ -277,7 +278,7 @@
                         </button>
                         <button type="button" name="Cancelled"
                             class="w-full border-gray-400 text-gray-500 font-semibold py-2 rounded-lg"
-                            onclick="window.history.back();">
+                            data-action="back">
                             Cancel
                         </button>
                     </div>
@@ -308,7 +309,7 @@
         </div>
     </div>
 
-    <script>
+    <script nonce="{{ csp_nonce() }}">
         // Helper function to generate HTML for a new list item recursively.
         // It clones the first item from a hidden template, updates indices, and returns it.
         function cloneAndPrepareListItem(templateNode, newIndex, namePrefix) {
@@ -585,8 +586,11 @@
             return true;
         }
 
-        // Make functions globally accessible for inline event handlers
-        window.submitValidation = submitValidation;
+        document.getElementById('selectCountryForm').addEventListener('submit', function (event) {
+            if (!submitValidation()) {
+                event.preventDefault();
+            }
+        });
     </script>
 </body>
 

@@ -45,3 +45,22 @@ _06 Oct 2026_
 - Raw payloads, request bodies and headers are no longer logged or printed.
 - Pages use the `strict-origin` referrer policy instead of `no-referrer`: with `no-referrer` browsers send `Origin: null` on form posts, which the backend's CSRF check rejects.
 - The Content-Security-Policy has no `form-action`: browsers apply it to redirects too, which blocked the backend's redirect to the authorization server after consent.
+
+## [Unreleased]
+
+### Changed
+- `requests` 2.32.3 → 2.34.2 (PYSEC-2026-1872, PYSEC-2026-2275), `werkzeug` 3.1.6 → 3.1.9 (CVE-2026-102598), `Flask-Cors` 6.0.2 → 6.0.5, matching the backend.
+- Removed requirements nothing imports: `Flask-Session`, `flask_api`, `validators`, `jsonschema` and `config`.
+- Display payloads can be authenticated: with the new `payload_key` configuration the `/display_*` pages and `/internal_error` require `payload_jwt`, an HS256 JWT from the backend (claims `payload`, `aud` = `frontend_id`, `iat`, `exp`, lifetime at most 300 s, 60 s clock skew), and use its `payload` claim; the plain `payload` field is ignored. A missing or invalid token gets `400` with a generic page. Without `payload_key` a warning is logged at start-up.
+- Each page only accepts the backend endpoint it posts to or links to (e.g. `/display_form` → `<backend>/dynamic/form` or `/preauth_form`), on top of the same-origin check.
+- Wallet links use an allowlist: `openid-credential-offer`, `openid4vp`, `eudi-openid4vp`, `haip`, `mdoc-openid4vp`, and `https` only to the backend or to the hosts in the new `wallet_https_hosts` configuration (default none). The wallet tester link (`wallet_dev`) needs its host in `wallet_https_hosts`.
+- Metadata requests to the backend (which carry `X-Api-Key`) do not follow redirects, and start-up fails when `backend_url` is not https, except for `localhost`, `127.0.0.1` and `::1`.
+- The pushed authorization proxy sends the wallet's address (`request.remote_addr`) in `X-Forwarded-For` so the authorization server can rate-limit per wallet (`trusted_proxies: 1` there). Request bodies are limited to 1 MiB (`max_content_length`).
+- Content-Security-Policy: `script-src` no longer allows `'unsafe-inline'`; inline scripts carry a per-request nonce and inline event handlers moved to `static/scripts/page-actions.js`. `style-src` is `'self' 'unsafe-inline'` instead of any https origin.
+- `/.well-known/oauth-authorization-server` serves the backend's OAuth authorization server metadata instead of the OpenID configuration.
+- Removed the unused templates `misc/eidas_fail.html` and `dynamic/pt_url.html` and the unused `werkzeug.debug` import.
+
+### Fixed
+- The PID login page polled `<service_url>pid_authorization` (missing `/`, on the frontend) and then opened `/getpidoid4vp` on the frontend; it now polls `<backend_url>/pid_authorization` and opens `<backend_url>/getpidoid4vp`.
+- `Accept: application/jwt` on `/.well-known/openid-credential-issuer` without signed metadata returns `406` instead of `500`.
+- The 404 handler logs one line instead of a stack trace.

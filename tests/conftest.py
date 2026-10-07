@@ -21,6 +21,7 @@ frontend_id: "fe1"
 backend_url: "https://backend.test"
 oauth_url: "https://fe.test/oidc"
 backend_api_key: "{'k' * 40}"
+wallet_https_hosts: ["tester.test"]
 """
     )
 os.makedirs(os.path.join(_CONFIG_DIR, "logs"), exist_ok=True)
@@ -41,8 +42,8 @@ METADATA = {
 }
 
 
-def _fake_get(url, headers=None, timeout=None):
-    response = mock.Mock()
+def _fake_get(url, headers=None, timeout=None, allow_redirects=True):
+    response = mock.Mock(is_redirect=False)
     response.raise_for_status = lambda: None
     response.json = lambda: {"signed_metadata": "a.b.c"} if url.endswith("/signed") else METADATA
     return response

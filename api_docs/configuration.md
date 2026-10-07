@@ -13,7 +13,18 @@ Parameters that should be changed:
 - `backend_url` (Public base url of the back-end service; pages only post to, and navigate to, URLs on this origin)
 - `backend_origins` (Optional list of other public origins of the back-end, if browsers reach it under more than one)
 - `oauth_url` (Base url for the authorization service)
-- `backend_api_key` (API key sent to the backend in the `X-Api-Key` header; must match the backend's `backend_api_key`)
-- `log_dir` (Log directory)
+- `backend_api_key` (API key sent to the backend in the `X-Api-Key` header; must match the backend's `backend_api_key`; secret)
+- `log_dir` (Log file; its directory is created at start-up)
+
+Optional parameters (defaults in brackets):
+
+- `log_level` [`INFO`] (`DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL`)
+- `payload_key` [unset] (Shared secret, at least 32 characters, the same value as `frontend.frontends_config.<frontend_id>.payload_key` in the backend. When set, the `/display_*` pages only accept payloads the backend signed (`payload_jwt`, HS256, `aud` = `frontend_id`); when unset they accept unauthenticated payloads and a warning is logged at start-up; secret)
+- `wallet_https_hosts` [none] (Host names an https wallet link on the QR code pages may point to, e.g. the wallet tester; the backend origins and the wallet deep link schemes are always allowed)
+- `max_content_length` [`1048576`] (Largest request body in bytes; larger requests get 413)
+
+`backend_url` must be https; plain http is only accepted for `localhost`, `127.0.0.1` and `::1`, because the API key is sent to it.
+
+Every key is described in `frontend_config_example.yaml`.
 
 The front-end's metadata (`/.well-known/openid-credential-issuer`, `/.well-known/openid-configuration` and `/.well-known/oauth-authorization-server`) is loaded from the backend at start-up (`GET /metadata/<frontend_id>` and `GET /metadata/<frontend_id>/signed`). The credentials it advertises (`credentials_supported`) and the authorization server it points to (`oauth_url`) are therefore configured in the backend, under `frontend.frontends_config.<frontend_id>`.

@@ -1,20 +1,28 @@
 """Frontend pages.
 
 The backend sends the data of most pages as a JSON ``payload`` form field
-from an auto-submitting page. Anyone can post such a form, so every value is
-treated as untrusted:
+from an auto-submitting page. When ``payload_key`` is configured, the backend
+also sends ``payload_jwt``, an HS256 JWT over the payload, and only the
+verified token is used (:func:`_load_payload`). Without it anyone can post
+such a form, so every value is treated as untrusted either way:
 
-* URLs the page posts or navigates to must be on the backend
-  (:func:`_backend_url`);
-* wallet links must use a scheme that cannot run code (:func:`_wallet_url`);
+* URLs the page posts or navigates to must be the backend endpoint the page
+  is meant for (:func:`_backend_url`, :data:`_BACKEND_PATHS`);
+* wallet links must use a wallet scheme, or https to an allowed host
+  (:func:`_wallet_url`);
 * QR codes must be PNG data URIs (:func:`_qr_code`).
 
 A value that fails these checks gets ``400``.
 """
 
+import base64
+import hashlib
+import hmac
 import json
 import logging
+import math
 import re
+import time
 from typing import Any, Dict, Optional
 from urllib.parse import urlencode, urlsplit
 
@@ -28,7 +36,8 @@ from flask import (
     request,
 )
 
-from app import oidc_metadata, openid_metadata, signed_metadata
+import app
+from app import oauth_metadata, oidc_metadata, openid_metadata
 from app import CONFIGURATION
 
 frontend = Blueprint("frontend", __name__, url_prefix="/")
@@ -38,25 +47,60 @@ logger = logging.getLogger(__name__)
 #: Wallet / offer link: ``scheme://...`` with no character that could leave
 #: an HTML attribute or a URL.
 _WALLET_URL = re.compile(r"[a-z][a-z0-9+.\-]{0,31}://[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%\-]{0,8000}")
-#: Schemes that run code or read local data when a link is opened.
-_FORBIDDEN_SCHEMES = frozenset({"javascript", "data", "vbscript", "file", "blob", "about"})
+#: Wallet link schemes (credential offer and OpenID4VP deeplinks). ``https``
+#: links are only accepted to the backend or to ``wallet_https_hosts``.
+_WALLET_SCHEMES = frozenset({"openid-credential-offer", "openid4vp", "eudi-openid4vp", "haip", "mdoc-openid4vp"})
 _QR_PREFIX = "data:image/png;base64,"
 _BASE64 = re.compile(r"[A-Za-z0-9+/=]*")
+
+#: Backend endpoint(s) each page's URLs may point to, relative to
+#: ``backend_url``; from the backend's ``redirect_url`` values and the paths
+#: the templates append to them.
+_BACKEND_PATHS = {
+    # auth_method.html appends "dynamic/auth_method".
+    "display_auth_method": ("/",),
+    "display_form": ("/dynamic/form", "/preauth_form"),
+    "display_authorization": ("/dynamic/redirect_wallet", "/form_authorize_generate"),
+    # credential_offer.html appends "/credential_offer".
+    "display_credential_offer": ("/",),
+    "display_revocation_choice": ("/revocation/oid4vp_call",),
+    # revocation_qr_code.html appends "pid_authorization" and "revocation/getoid4vp".
+    "display_revocation_qr_code": ("/",),
+    "display_revocation_authorization": ("/revocation/revoke",),
+    "revocation_choice_url": ("/revocation/revocation_choice",),
+}
+
+#: ``payload_jwt``: maximum lifetime and age (seconds), and allowed clock skew.
+PAYLOAD_JWT_MAX_AGE = 300
+PAYLOAD_JWT_LEEWAY = 60
+_JWS_SEGMENT = re.compile(r"[A-Za-z0-9_-]+")
 
 
 class InvalidPayload(ValueError):
     """Raised when a payload value fails validation."""
 
 
+class UnauthenticatedPayload(InvalidPayload):
+    """Raised when ``payload_jwt`` is required but missing or invalid."""
+
+
 def _load_payload() -> Dict[str, Any]:
-    """Reads the JSON ``payload`` form field.
+    """Reads the page payload.
+
+    With ``payload_key`` configured it is the ``payload`` claim of the
+    verified ``payload_jwt`` field (the plain ``payload`` field is ignored);
+    otherwise the JSON ``payload`` form field.
 
     Returns:
         The decoded payload.
 
     Raises:
+        UnauthenticatedPayload: If ``payload_jwt`` is required and fails
+            :func:`_verify_payload_jwt`.
         InvalidPayload: If it is missing or not a JSON object.
     """
+    if CONFIGURATION.get("payload_key"):
+        return _verify_payload_jwt(request.form.get("payload_jwt"))
     raw = request.form.get("payload")
     if not raw:
         raise InvalidPayload("Payload not found")
@@ -69,23 +113,108 @@ def _load_payload() -> Dict[str, Any]:
     return payload
 
 
-def _backend_url(value: Optional[str]) -> str:
-    """Accepts a URL only when it points to the backend.
+def _verify_payload_jwt(token: Optional[str]) -> Dict[str, Any]:
+    """Verifies the backend's ``payload_jwt`` and returns its payload.
+
+    The token is a compact JWS signed with HS256 under the UTF-8 bytes of
+    ``payload_key``, with claims ``payload``, ``aud`` (this frontend's
+    ``frontend_id``), ``iat`` and ``exp`` (at most
+    :data:`PAYLOAD_JWT_MAX_AGE` after ``iat``).
+
+    Args:
+        token: The ``payload_jwt`` form field.
+
+    Returns:
+        The ``payload`` claim.
+
+    Raises:
+        UnauthenticatedPayload: If the token is missing, malformed, not
+            HS256, wrongly signed, for another audience, expired, too old or
+            issued in the future, or its ``payload`` is not an object.
+    """
+    if not isinstance(token, str):
+        raise UnauthenticatedPayload("Payload token not found")
+    segments = token.split(".")
+    if len(segments) != 3 or not all(_JWS_SEGMENT.fullmatch(segment) for segment in segments):
+        raise UnauthenticatedPayload("Malformed payload token")
+    header_b64, claims_b64, signature_b64 = segments
+    try:
+        header = json.loads(_b64url_decode(header_b64))
+        signature = _b64url_decode(signature_b64)
+    except ValueError as e:
+        raise UnauthenticatedPayload("Malformed payload token") from e
+    # Only HS256: never "none" or an algorithm chosen by the token.
+    if not isinstance(header, dict) or header.get("alg") != "HS256" or "crit" in header:
+        raise UnauthenticatedPayload("Payload token algorithm not accepted")
+
+    expected = hmac.new(
+        CONFIGURATION["payload_key"].encode("utf-8"), f"{header_b64}.{claims_b64}".encode("ascii"), hashlib.sha256
+    ).digest()
+    if not hmac.compare_digest(expected, signature):
+        raise UnauthenticatedPayload("Invalid payload token signature")
+
+    try:
+        claims = json.loads(_b64url_decode(claims_b64))
+    except ValueError as e:
+        raise UnauthenticatedPayload("Malformed payload token") from e
+    if not isinstance(claims, dict) or claims.get("aud") != CONFIGURATION["frontend_id"]:
+        raise UnauthenticatedPayload("Payload token is not for this frontend")
+    iat, exp = claims.get("iat"), claims.get("exp")
+    if not (_is_time(iat) and _is_time(exp)):
+        raise UnauthenticatedPayload("Payload token without valid iat / exp")
+    now = time.time()
+    if (
+        exp <= now - PAYLOAD_JWT_LEEWAY
+        or iat > now + PAYLOAD_JWT_LEEWAY
+        or iat < now - PAYLOAD_JWT_MAX_AGE - PAYLOAD_JWT_LEEWAY
+        or exp - iat > PAYLOAD_JWT_MAX_AGE
+    ):
+        raise UnauthenticatedPayload("Payload token expired or not yet valid")
+
+    payload = claims.get("payload")
+    if not isinstance(payload, dict):
+        raise UnauthenticatedPayload("Payload token without a payload object")
+    return payload
+
+
+def _b64url_decode(segment: str) -> bytes:
+    """Decodes an unpadded base64url JWS segment."""
+    return base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
+
+
+def _is_time(value: Any) -> bool:
+    """Whether a claim is a finite NumericDate (``bool`` and NaN excluded)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _backend_url(value: Optional[str], page: str) -> str:
+    """Accepts a URL only when it is the backend endpoint a page is meant for.
 
     Args:
         value: URL from the payload.
+        page: Key of :data:`_BACKEND_PATHS` (usually the route name).
 
     Returns:
         ``value``.
 
     Raises:
         InvalidPayload: If it is not an http(s) URL on the origin of
-            ``backend_url`` (or of an entry in ``backend_origins``).
+            ``backend_url`` (or of an entry in ``backend_origins``), or its
+            path is not one of the page's paths under ``backend_url`` (or it
+            has a query or fragment).
     """
-    allowed = {_origin(url) for url in [CONFIGURATION["backend_url"], *(CONFIGURATION.get("backend_origins") or [])]}
-    if not isinstance(value, str) or urlsplit(value).scheme not in ("http", "https") or _origin(value) not in allowed:
+    if not isinstance(value, str) or urlsplit(value).scheme not in ("http", "https") or _origin(value) not in _backend_origins():
         raise InvalidPayload("URL is not on the backend")
+    parts = urlsplit(value)
+    base_path = urlsplit(CONFIGURATION["backend_url"]).path.rstrip("/")
+    if parts.query or parts.fragment or parts.path not in {base_path + path for path in _BACKEND_PATHS[page]}:
+        raise InvalidPayload("URL is not the backend endpoint of this page")
     return value
+
+
+def _backend_origins() -> set:
+    """Returns the origins of ``backend_url`` and ``backend_origins``."""
+    return {_origin(url) for url in [CONFIGURATION["backend_url"], *(CONFIGURATION.get("backend_origins") or [])]}
 
 
 def _origin(url: str) -> str:
@@ -104,15 +233,23 @@ def _wallet_url(value: Optional[str]) -> Optional[str]:
         ``value``.
 
     Raises:
-        InvalidPayload: If it uses a script-capable scheme or unsafe characters.
+        InvalidPayload: If it uses unsafe characters, a scheme other than
+            :data:`_WALLET_SCHEMES` or ``https``, or is an https link to a
+            host other than the backend and ``wallet_https_hosts``.
     """
     if value is None:
         return None
     if not isinstance(value, str) or not _WALLET_URL.fullmatch(value):
         raise InvalidPayload("Invalid wallet URL")
-    if value.split(":", 1)[0] in _FORBIDDEN_SCHEMES:
-        raise InvalidPayload("Invalid wallet URL")
-    return value
+    scheme = value.split(":", 1)[0]
+    if scheme in _WALLET_SCHEMES:
+        return value
+    if scheme == "https":
+        parts = urlsplit(value)
+        hosts = {host.lower() for host in CONFIGURATION.get("wallet_https_hosts") or []}
+        if _origin(value) in _backend_origins() or (parts.username is None and parts.hostname in hosts):
+            return value
+    raise InvalidPayload("Invalid wallet URL")
 
 
 def _qr_code(value: Optional[str]) -> Optional[str]:
@@ -150,10 +287,29 @@ def _with_query(url: str, **params: Any) -> str:
     return f"{url}{'&' if '?' in url else '?'}{query}"
 
 
+def _route() -> str:
+    """The matched route for logs; the raw path is client-controlled."""
+    return request.url_rule.rule if request.url_rule else "-"
+
+
 @frontend.errorhandler(InvalidPayload)
 def _invalid_payload(e: InvalidPayload):
-    logger.warning(f"Rejected {request.path}: {e}")
+    logger.warning("Rejected %s: %s", _route(), e)
     return jsonify({"status": "error", "message": str(e)}), 400
+
+
+@frontend.errorhandler(UnauthenticatedPayload)
+def _unauthenticated_payload(e: UnauthenticatedPayload):
+    logger.warning("Rejected %s: %s", _route(), e)
+    # Generic page: nothing from the request is shown.
+    return (
+        render_template(
+            "misc/500.html",
+            error="The request could not be verified. Please start again from the beginning.",
+            error_code="Bad Request",
+        ),
+        400,
+    )
 
 
 @frontend.route("/display_auth_method", methods=["POST"])
@@ -163,7 +319,7 @@ def display_auth_method():
         "misc/auth_method.html",
         pid_auth=payload.get("pid_auth"),
         country_selection=payload.get("country_selection"),
-        redirect_url=_backend_url(payload.get("redirect_url")),
+        redirect_url=_backend_url(payload.get("redirect_url"), "display_auth_method"),
     )
 
 
@@ -185,7 +341,7 @@ def display_form():
         "dynamic/dynamic-form.html",
         mandatory_attributes=payload.get("mandatory_attributes"),
         optional_attributes=payload.get("optional_attributes"),
-        redirect_url=_backend_url(payload.get("redirect_url")),
+        redirect_url=_backend_url(payload.get("redirect_url"), "display_form"),
     )
 
 
@@ -196,7 +352,7 @@ def display_authorization():
         "dynamic/form_authorize.html",
         presentation_data=payload.get("presentation_data"),
         user_id=payload.get("session_id"),
-        redirect_url=_backend_url(payload.get("redirect_url")),
+        redirect_url=_backend_url(payload.get("redirect_url"), "display_authorization"),
     )
 
 
@@ -208,7 +364,8 @@ def display_pid_login():
         url_data=_wallet_url(payload.get("deeplink_url")),
         qrcode=_qr_code(payload.get("qr_img_base64")),
         presentation_id=payload.get("transaction_id"),
-        redirect_url=CONFIGURATION["service_url"],
+        # The page polls the backend's /pid_authorization, then opens its /getpidoid4vp.
+        backend_url=CONFIGURATION["backend_url"],
     )
 
 
@@ -231,14 +388,19 @@ def _json_metadata(document: Dict[str, Any]):
 def well_known(service):
     if service == "openid-credential-issuer":
         if "application/jwt" in request.headers.get("Accept", ""):
-            resp = make_response(signed_metadata, 200)
+            if not app.signed_metadata:
+                return make_response("Signed metadata not available", 406)
+            resp = make_response(app.signed_metadata, 200)
             resp.headers["Content-Type"] = "application/jwt"
             resp.headers["Pragma"] = "no-cache"
             resp.headers["Cache-Control"] = "no-store"
             return resp
         return _json_metadata(oidc_metadata)
 
-    if service in ("oauth-authorization-server", "openid-configuration"):
+    if service == "oauth-authorization-server":
+        return _json_metadata(oauth_metadata)
+
+    if service == "openid-configuration":
         return _json_metadata(openid_metadata)
 
     return make_response("Not supported", 400)
@@ -258,8 +420,8 @@ def display_revocation_authorization():
         "misc/revocation_authorization.html",
         display_list=payload.get("display_list"),
         revocation_identifier=payload.get("revocation_identifier"),
-        redirect_url=_backend_url(payload.get("redirect_url")),
-        revocation_choice_url=_backend_url(payload.get("revocation_choice_url")),
+        redirect_url=_backend_url(payload.get("redirect_url"), "display_revocation_authorization"),
+        revocation_choice_url=_backend_url(payload.get("revocation_choice_url"), "revocation_choice_url"),
     )
 
 
@@ -286,7 +448,7 @@ def display_credential_offer():
     return render_template(
         "openid/credential_offer.html",
         cred=credentials,
-        redirect_url=_backend_url(payload.get("redirect_url")),
+        redirect_url=_backend_url(payload.get("redirect_url"), "display_credential_offer"),
         credential_offer_URI=payload.get("credential_offer_URI"),
     )
 
@@ -320,7 +482,7 @@ def display_revocation_choice():
     return render_template(
         "openid/revocation_choice.html",
         cred=payload.get("cred"),
-        redirect_url=_backend_url(payload.get("redirect_url")),
+        redirect_url=_backend_url(payload.get("redirect_url"), "display_revocation_choice"),
     )
 
 
@@ -332,5 +494,5 @@ def display_revocation_qr_code():
         url_data=_wallet_url(payload.get("url_data")),
         qrcode=_qr_code(payload.get("qrcode")),
         presentation_id=payload.get("presentation_id"),
-        redirect_url=_backend_url(payload.get("redirect_url")),
+        redirect_url=_backend_url(payload.get("redirect_url"), "display_revocation_qr_code"),
     )

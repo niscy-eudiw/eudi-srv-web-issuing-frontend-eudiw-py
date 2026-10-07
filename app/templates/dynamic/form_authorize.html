@@ -30,6 +30,7 @@
     <meta name="referrer" content="strict-origin">
 
     <title>Confirm data from your EUDI Wallet</title>
+    <script type="text/javascript" src="{{ url_for('static', filename='scripts/page-actions.js') }}" charset="UTF-8" defer="true"></script>
 </head>
 
 {# ===================================================================== #}
@@ -134,7 +135,7 @@
                     </button>
                     <button type="button" name="Cancelled"
                         class="w-full border-gray-400 text-gray-500 font-semibold py-2 rounded-lg"
-                        onclick="window.history.back();">
+                        data-action="back">
                         Cancel
                     </button>
                 </div>

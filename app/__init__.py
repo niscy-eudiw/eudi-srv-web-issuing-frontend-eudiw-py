@@ -25,6 +25,7 @@ This __init__.py serves double duty: it will contain the application factory, an
 import os
 import sys
 import logging
+import secrets
 import yaml
 import requests
 
@@ -34,9 +35,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from flask import Flask, jsonify, render_template, send_from_directory
+from flask import Flask, g, jsonify, render_template, request, send_from_directory
 from flask_cors import CORS
-from werkzeug.debug import *
 from werkzeug.exceptions import HTTPException
 from typing import Dict, Any
 
@@ -90,7 +90,8 @@ def handle_exception(e):
 
 
 def page_not_found(e):
-    logger.exception("- WARN - Error 404")
+    # repr() escapes control characters, so the path cannot forge log lines.
+    logger.warning("Error 404: %r", request.path)  # nosemgrep: log-request-data-unsanitised
     return (
         render_template(
             "misc/500.html",
@@ -102,28 +103,40 @@ def page_not_found(e):
 
 
 from typing import Optional
+from urllib.parse import urlsplit
 
 
 #: Script origins the templates load from, besides this frontend.
 _SCRIPT_ORIGINS = ("https://webgate.ec.europa.eu",)
 
 
-def _content_security_policy() -> str:
-    """Builds the Content-Security-Policy of every page.
+#: Default ``MAX_CONTENT_LENGTH`` (``max_content_length``): 1 MiB.
+DEFAULT_MAX_CONTENT_LENGTH = 1024 * 1024
+#: Hosts ``backend_url`` may use plain http with (local development).
+_LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+
+def _content_security_policy(nonce: str) -> str:
+    """Builds the Content-Security-Policy of a page.
 
     There is no ``form-action``: browsers apply it to the whole redirect chain
     of a submission, and the backend answers form posts with redirects to the
     authorization server and to country identity providers. Form targets come
-    only from validated payload URLs (:mod:`app.frontend`). Inline scripts are
-    still allowed because the templates use inline event handlers.
+    only from validated payload URLs (:mod:`app.frontend`). Inline scripts run
+    only with the per-request ``nonce`` (``csp_nonce`` in templates); event
+    handlers are in ``static/scripts/page-actions.js``. Templates only load
+    stylesheets from this frontend.
+
+    Args:
+        nonce: Nonce of this response's inline ``<script>`` blocks.
     """
     backends = " ".join(
         sorted({_origin(url) for url in [CONFIGURATION["backend_url"], *(CONFIGURATION.get("backend_origins") or [])]})
     )
     return (
         "default-src 'self'; "
-        f"script-src 'self' 'unsafe-inline' {' '.join(_SCRIPT_ORIGINS)}; "
-        "style-src 'self' 'unsafe-inline' https:; "
+        f"script-src 'self' 'nonce-{nonce}' {' '.join(_SCRIPT_ORIGINS)}; "
+        "style-src 'self' 'unsafe-inline'; "
         "font-src 'self' data: https:; "
         "img-src 'self' data:; "
         f"connect-src 'self' {backends}; "
@@ -133,15 +146,25 @@ def _content_security_policy() -> str:
 
 def _origin(url: str) -> str:
     """Returns ``scheme://host[:port]`` of a URL."""
-    from urllib.parse import urlsplit
-
     parts = urlsplit(url)
     return f"{parts.scheme}://{parts.netloc}"
+
+
+def _check_backend_url() -> None:
+    """Refuses a ``backend_url`` the API key would be sent to in clear.
+
+    Raises:
+        RuntimeError: If it is not https and its host is not local.
+    """
+    parts = urlsplit(CONFIGURATION["backend_url"])
+    if parts.scheme != "https" and not (parts.scheme == "http" and parts.hostname in _LOCAL_HOSTS):
+        raise RuntimeError("backend_url must be https (http only for localhost, 127.0.0.1 or ::1)")
 
 
 def create_app(test_config=None):
     # create and configure the app
     app = Flask(__name__, instance_relative_config=True)
+    app.config["MAX_CONTENT_LENGTH"] = int(CONFIGURATION.get("max_content_length", DEFAULT_MAX_CONTENT_LENGTH))
 
     app.register_error_handler(Exception, handle_exception)
     app.register_error_handler(404, page_not_found)
@@ -149,6 +172,11 @@ def create_app(test_config=None):
     configure_logging(app, CONFIGURATION)
 
     app.logger.info("Running initialization setups...")
+    _check_backend_url()
+    if not CONFIGURATION.get("payload_key"):
+        logger.warning(
+            "payload_key is not configured: display payloads are unauthenticated (anyone can post them to /display_*)"
+        )
     setup_metadata()
 
     @app.route("/", methods=["GET"])
@@ -191,11 +219,20 @@ def create_app(test_config=None):
     # public metadata may be read cross-origin, without credentials.
     CORS(app, resources={r"/.well-known/*": {"origins": "*"}}, supports_credentials=False, send_wildcard=True)
 
-    content_security_policy = _content_security_policy()
+    @app.context_processor
+    def csp_nonce():
+        # One nonce per request, created when a template first uses it.
+        def nonce():
+            if "csp_nonce" not in g:
+                g.csp_nonce = secrets.token_urlsafe(16)
+            return g.csp_nonce
+
+        return {"csp_nonce": nonce}
 
     @app.after_request
     def add_security_headers(response):
-        response.headers.setdefault("Content-Security-Policy", content_security_policy)
+        nonce = g.get("csp_nonce") or secrets.token_urlsafe(16)
+        response.headers.setdefault("Content-Security-Policy", _content_security_policy(nonce))
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "strict-origin")
         response.headers.setdefault("X-Frame-Options", "DENY")
@@ -223,7 +260,11 @@ def _fetch_backend_metadata(path: str) -> Dict[str, Any]:
         url,
         headers={"X-Api-Key": CONFIGURATION["backend_api_key"]},
         timeout=METADATA_TIMEOUT,
+        # A redirect could carry the API key to another host.
+        allow_redirects=False,
     )
+    if response.is_redirect:
+        raise RuntimeError(f"Backend redirected the metadata request ({response.status_code})")
     response.raise_for_status()
     return response.json()
 
@@ -239,7 +280,7 @@ def setup_metadata():
 
     try:
         documents = _fetch_backend_metadata("")
-        signed = _fetch_backend_metadata("/signed")["signed_metadata"]
+        signed = _fetch_backend_metadata("/signed").get("signed_metadata")
     except Exception:
         logger.exception("Metadata Error: unable to load metadata from the backend")
         raise
