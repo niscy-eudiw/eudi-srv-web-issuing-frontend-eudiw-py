@@ -111,9 +111,11 @@ _SCRIPT_ORIGINS = ("https://webgate.ec.europa.eu",)
 def _content_security_policy() -> str:
     """Builds the Content-Security-Policy of every page.
 
-    Forms may only post to this frontend and the backend. Inline scripts are
-    still allowed because the templates use inline event handlers; every
-    payload value that reaches a page is validated in :mod:`app.frontend`.
+    There is no ``form-action``: browsers apply it to the whole redirect chain
+    of a submission, and the backend answers form posts with redirects to the
+    authorization server and to country identity providers. Form targets come
+    only from validated payload URLs (:mod:`app.frontend`). Inline scripts are
+    still allowed because the templates use inline event handlers.
     """
     backends = " ".join(
         sorted({_origin(url) for url in [CONFIGURATION["backend_url"], *(CONFIGURATION.get("backend_origins") or [])]})
@@ -125,7 +127,6 @@ def _content_security_policy() -> str:
         "font-src 'self' data: https:; "
         "img-src 'self' data:; "
         f"connect-src 'self' {backends}; "
-        f"form-action 'self' {backends}; "
         "frame-ancestors 'none'; base-uri 'none'; object-src 'none'"
     )
 
@@ -196,7 +197,7 @@ def create_app(test_config=None):
     def add_security_headers(response):
         response.headers.setdefault("Content-Security-Policy", content_security_policy)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Referrer-Policy", "strict-origin")
         response.headers.setdefault("X-Frame-Options", "DENY")
         return response
 

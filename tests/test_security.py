@@ -179,7 +179,10 @@ class TestHeadersAndCors:
     def test_security_headers(self, client):
         headers = client.get("/").headers
         csp = headers["Content-Security-Policy"]
-        assert "frame-ancestors 'none'" in csp and "form-action 'self' https://backend.test" in csp
+        assert "frame-ancestors 'none'" in csp
+        # form-action would also block the backend's redirects to the
+        # authorization server and identity providers after a form post.
+        assert "form-action" not in csp
         assert "object-src 'none'" in csp and "base-uri 'none'" in csp
         assert headers["X-Content-Type-Options"] == "nosniff"
         assert headers["X-Frame-Options"] == "DENY"
@@ -219,3 +222,24 @@ class TestParProxy:
         monkeypatch.setattr(requests, "post", mock.Mock(side_effect=requests.ConnectionError("secret internal host:5000")))
         failure = client.post("/pushed_authorization", data={"client_id": "w"})
         assert failure.status_code == 502 and "secret internal host" not in failure.get_data(as_text=True)
+
+
+class TestReferrerPolicy:
+    """Pages post forms to the backend, whose CSRF check needs the Origin header.
+
+    Browsers send ``Origin: null`` on a cross-site POST when the page's
+    referrer policy is ``no-referrer`` or ``same-origin``.
+    """
+
+    BLOCKING = ("no-referrer", "same-origin")
+
+    def test_templates_do_not_suppress_origin(self):
+        import pathlib
+
+        templates = pathlib.Path(__file__).resolve().parent.parent / "app" / "templates"
+        for template in templates.rglob("*.html"):
+            for policy in re.findall(r'<meta name="referrer" content="([^"]+)"', template.read_text()):
+                assert policy not in self.BLOCKING, f"{template.name}: referrer {policy}"
+
+    def test_header_does_not_suppress_origin(self, client):
+        assert client.get("/").headers["Referrer-Policy"] not in self.BLOCKING

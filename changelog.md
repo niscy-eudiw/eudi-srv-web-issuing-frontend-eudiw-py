@@ -43,3 +43,5 @@ _06 Oct 2026_
 - DOM XSS in the attribute form, where attribute names were inserted with `innerHTML`.
 - `/internal_error` no longer takes its HTTP status from the posted payload.
 - Raw payloads, request bodies and headers are no longer logged or printed.
+- Pages use the `strict-origin` referrer policy instead of `no-referrer`: with `no-referrer` browsers send `Origin: null` on form posts, which the backend's CSRF check rejects.
+- The Content-Security-Policy has no `form-action`: browsers apply it to redirects too, which blocked the backend's redirect to the authorization server after consent.
