@@ -49,6 +49,7 @@ _06 Oct 2026_
 ## [Unreleased]
 
 ### Changed
+- Templates share one page frame, `layout/base.html` (head, header, main container), with `layout/_footer.html`, `openid/_credential_select.html` (credential checkboxes, buttons, submit script), `openid/_qr_code.html` and `openid/_oid4vp_qr_code.html` (the PID login and revocation QR pages differ only in three URLs). The seven pages SonarCloud reported as duplicated (13.6% of the lines) keep their names and output; the error and start pages gain the viewport meta tag, and an unused `#check` script is gone from the QR pages.
 - Boolean toggles in the attribute form: the switch's own label carries the field name (screen-reader text); the visible title is no longer a second label. The reviewed CSRF (S4502) and CORS (S5122) hotspots in `app/__init__.py` are marked `# NOSONAR`.
 - SonarCloud reliability: the PAR relay reads wallet headers with `.get()` and returns a `Response` on every path (it mixed 3- and 2-tuples); the unauthenticated-payload handler returns its 400 as a plain `(page, 400)` tuple. Templates: labels tied to their controls, `alt` text on images, no `accesskey`, headings with accessible text.
 - The PAR relay no longer logs the wallet's `client_id` (SonarCloud log injection; the authorization server logs the authenticated client). Comments at `create_app` and the CORS setup record why the CSRF (S4502) and CORS (S5122) hotspots are safe.
