@@ -56,9 +56,11 @@
     {# Boolean (Toggle Switch) #}
     {% elif attr.type == 'bool' %}
     <div class="mb-6 flex items-center justify-between">
-        <label for="field-{{ current_name }}" class="font-pf text-lg font-bold text-gray-800">{{ name | replace('_', ' ') | title }}</label>
+        {# Visible title; the switch's label below carries the same text for screen readers. #}
+        <span class="font-pf text-lg font-bold text-gray-800" aria-hidden="true">{{ name | replace('_', ' ') | title }}</span>
         <input type="hidden" name="{{ current_name }}" value="false">
         <label class="relative inline-flex items-center cursor-pointer">
+            <span class="sr-only">{{ name | replace('_', ' ') | title }}</span>
             <input type="checkbox" id="field-{{ current_name }}" value="true" class="sr-only peer toggle-input">
             <div class="w-11 h-6 bg-gray-200 rounded-full peer-checked:bg-indigo-600"></div>
             <div

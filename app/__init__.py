@@ -168,7 +168,7 @@ def create_app(test_config=None):
     # backend's auto-submitting pages post to them from another origin; the
     # data is authenticated by payload_key), and /pushed_authorization is a
     # wallet API authenticated by the wallet attestation headers.
-    app = Flask(__name__, instance_relative_config=True)
+    app = Flask(__name__, instance_relative_config=True)  # NOSONAR - CSRF not applicable, see above
     app.config["MAX_CONTENT_LENGTH"] = int(CONFIGURATION.get("max_content_length", DEFAULT_MAX_CONTENT_LENGTH))
 
     app.register_error_handler(Exception, handle_exception)
@@ -223,7 +223,7 @@ def create_app(test_config=None):
     # The frontend keeps no session (no cookie, no SECRET_KEY). Only the
     # public metadata may be read cross-origin, without credentials: browser
     # based wallets and verifiers fetch it (SonarCloud S5122 reviewed as safe).
-    CORS(app, resources={r"/.well-known/*": {"origins": "*"}}, supports_credentials=False, send_wildcard=True)
+    CORS(app, resources={r"/.well-known/*": {"origins": "*"}}, supports_credentials=False, send_wildcard=True)  # NOSONAR - public metadata only, no credentials
 
     @app.context_processor
     def csp_nonce():
