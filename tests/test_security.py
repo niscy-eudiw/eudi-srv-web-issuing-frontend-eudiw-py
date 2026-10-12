@@ -421,6 +421,8 @@ class TestWalletLinkAllowlist:
         "link",
         [
             "openid-credential-offer://?credential_offer_uri=x",
+            "haip-vci://?credential_offer_uri=x",
+            "eudi-openid4ci://?credential_offer_uri=x",
             "openid4vp://?request_uri=x",
             "eudi-openid4vp://verifier?request_uri=x",
             "haip://?request_uri=x",

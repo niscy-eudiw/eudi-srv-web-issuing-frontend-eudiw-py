@@ -49,7 +49,9 @@ logger = logging.getLogger(__name__)
 _WALLET_URL = re.compile(r"[a-z][a-z0-9+.\-]{0,31}://[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%\-]{0,8000}")
 #: Wallet link schemes (credential offer and OpenID4VP deeplinks). ``https``
 #: links are only accepted to the backend or to ``wallet_https_hosts``.
-_WALLET_SCHEMES = frozenset({"openid-credential-offer", "openid4vp", "eudi-openid4vp", "haip", "mdoc-openid4vp"})
+_WALLET_SCHEMES = frozenset(
+    {"openid-credential-offer", "haip-vci", "eudi-openid4ci", "openid4vp", "eudi-openid4vp", "haip", "mdoc-openid4vp"}
+)
 _QR_PREFIX = "data:image/png;base64,"
 _BASE64 = re.compile(r"[A-Za-z0-9+/=]*")
 
