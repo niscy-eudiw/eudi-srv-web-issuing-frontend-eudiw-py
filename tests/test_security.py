@@ -208,6 +208,20 @@ class TestHeadersAndCors:
         assert response.headers["Access-Control-Allow-Origin"] == "*"
         assert "Access-Control-Allow-Credentials" not in response.headers
 
+    def test_jwt_vc_issuer_metadata(self, client):
+        response = client.get("/.well-known/jwt-vc-issuer", headers={"Origin": "https://wallet.test"})
+        assert response.status_code == 200
+        assert response.headers["Content-Type"] == "application/json"
+        assert response.get_json()["issuer"] == "https://fe.test"
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+
+    def test_jwt_vc_issuer_metadata_absent_from_older_backend(self, client, monkeypatch):
+        import app as app_module
+
+        monkeypatch.setattr(app_module, "jwt_vc_issuer_metadata", {})
+        monkeypatch.setattr("app.frontend.jwt_vc_issuer_metadata", {})
+        assert client.get("/.well-known/jwt-vc-issuer").status_code == 404
+
     def test_no_session_cookie_or_secret(self, app, client):
         assert not app.config.get("SECRET_KEY")
         response = _post(client, "/display_pid_login", {"deeplink_url": "eudi-openid4vp://v", "qr_img_base64": QR, "transaction_id": "t"})

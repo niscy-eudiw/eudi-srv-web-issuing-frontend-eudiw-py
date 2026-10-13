@@ -39,6 +39,7 @@ METADATA = {
     },
     "openid_configuration": {"issuer": "https://fe.test"},
     "oauth_authorization_server": {"issuer": "https://backend.test"},
+    "jwt_vc_issuer": {"issuer": "https://fe.test", "jwks": {"keys": [{"kty": "EC", "kid": "ds"}]}},
 }
 
 

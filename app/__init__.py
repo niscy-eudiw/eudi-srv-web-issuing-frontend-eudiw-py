@@ -47,6 +47,7 @@ from app.app_config.logging_config import configure_logging
 oidc_metadata: Dict[str, Any] = {}
 openid_metadata: Dict[str, Any] = {}
 oauth_metadata: Dict[str, Any] = {}
+jwt_vc_issuer_metadata: Dict[str, Any] = {}
 signed_metadata: str = None
 
 
@@ -279,7 +280,8 @@ def setup_metadata():
     """Loads this frontend's metadata (unsigned and signed) from the backend.
 
     The backend builds the documents from ``frontends_config.<frontend_id>``
-    (``url``, ``credentials_supported``, ``oauth_url``). The dicts are updated
+    (``url``, ``credentials_supported``, ``oauth_url``) and the country
+    signing keys (``jwt_vc_issuer``). The dicts are updated
     in place so modules that imported them keep a valid reference.
     """
     global signed_metadata
@@ -297,6 +299,9 @@ def setup_metadata():
     openid_metadata.update(documents["openid_configuration"])
     oauth_metadata.clear()
     oauth_metadata.update(documents["oauth_authorization_server"])
+    jwt_vc_issuer_metadata.clear()
+    # Absent from backends that predate /.well-known/jwt-vc-issuer.
+    jwt_vc_issuer_metadata.update(documents.get("jwt_vc_issuer") or {})
     signed_metadata = signed
 
     logger.info(
