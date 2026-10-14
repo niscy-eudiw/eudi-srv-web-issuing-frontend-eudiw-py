@@ -12,7 +12,7 @@
    </head>
    <body class="font-pf">
       <!-- Main Layout Container -->
-      <div class="mx-auto w-full max-w-(--breakpoint-md) flex flex-col min-h-screen">
+      <div class="mx-auto w-full max-w-screen-md flex flex-col min-h-screen">
          <!-- Header -->
          <header class="p-6">
             <p class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Test Issuer</p>
@@ -20,8 +20,8 @@
             <h3 class="font-bold text-gray-800">The following credentials are about to be revoked. Do you authorize?</h3>
          </header>
          <!-- Authorization Form -->
-         <form id="revocationAuthorizationForm" method="post" action="{{ redirect_url }}" class="grow flex flex-col">
-            <main class="grow p-6 space-y-6">
+         <form id="revocationAuthorizationForm" method="post" action="{{ redirect_url }}" class="flex-grow flex flex-col">
+            <main class="flex-grow p-6 space-y-6">
                <!-- Display credentials grouped by type -->
                {% for credential_type, items in display_list.items() %}
                {% if items %}

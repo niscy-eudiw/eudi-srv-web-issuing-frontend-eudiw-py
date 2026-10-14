@@ -35,7 +35,7 @@
     <div class="mb-4">
         <label for="field-{{ current_name }}" class="block text-sm font-medium text-gray-700 mb-1">{{ name | replace('_', ' ') | title }}</label>
         <select id="field-{{ current_name }}" name="{{ current_name }}"
-            class="w-full p-3 border border-gray-300 rounded-md shadow-xs focus:ring-2 focus:ring-indigo-500">
+            class="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-indigo-500">
             {% for option in attr.options %}
             <option value="{{ option }}">{{ option }}</option>
             {% endfor %}
@@ -47,7 +47,7 @@
     <div class="mb-4">
         <label for="field-{{ current_name }}" class="block text-sm font-medium text-gray-700 mb-1">{{ name | replace('_', ' ') | title }}</label>
         <input id="field-{{ current_name }}" type="{{ 'date' if attr.type == 'full-date' else 'number' if attr.type == 'uint' else 'text' }}"
-            class="w-full p-3 border border-gray-300 rounded-md shadow-xs focus:ring-2 focus:ring-indigo-500"
+            class="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-indigo-500"
             name="{{ current_name }}" value="{{ attr.filled_value if attr.filled_value is not none else '' }}" {% if
             attr.filled_value or name=='user_pseudonym' %}readonly{% endif %} {% if attr.get('mandatory') %}required{%
             endif %} {% if attr.type=='uint' %}min="0" {% endif %}>
@@ -77,7 +77,7 @@
                 <input type="text" 
                     name="{{ current_name }}[]" 
                     aria-label="{{ name | replace('_', ' ') }} item"
-                    class="flex-1 p-3 border border-gray-300 rounded-md shadow-xs focus:ring-2 focus:ring-indigo-500"
+                    class="flex-1 p-3 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-indigo-500"
                     placeholder="Enter {{ name | replace('_', ' ') }}"
                     {% if attr.get('mandatory') %}required{% endif %}>
             </div>
@@ -106,7 +106,7 @@
 
             {# Special handling for Seafarer 'capacities' (mdoc only). #}
             {% if name == 'capacities' %}
-            <div class="list-item p-4 border rounded-md bg-gray-50 shadow-xs relative">
+            <div class="list-item p-4 border rounded-md bg-gray-50 shadow-sm relative">
                 {{ render_attribute('capacity_code', attr.attributes.capacity_code, is_optional,
                 name_prefix=current_name + '[0]') }}
                 {{ render_attribute('codes', attr.attributes.codes, is_optional, name_prefix=current_name + '[0]') }}
@@ -244,7 +244,7 @@
 
 
 <body class="bg-gray-50 font-sans">
-    <div role="main" class="mx-auto w-full max-w-(--breakpoint-md) p-6 flex flex-col min-h-screen">
+    <div role="main" class="mx-auto w-full max-w-screen-md p-6 flex flex-col min-h-screen">
         <div id="content" class="w-full flex flex-col bg-white p-8 rounded-xl shadow-lg"
             style="min-height: calc(100vh - 25vh);">
             <div class="space-y-2 mb-6">
@@ -296,13 +296,13 @@
         {% endfor %}
     </div>
 
-    <div id="attributes-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 hidden">
+    <div id="attributes-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col" style="max-height: 90vh;">
             <div class="p-6 border-b flex justify-between items-center">
                 <h2 class="text-2xl font-pf font-bold text-gray-800">Additional Attributes</h2><button
                     id="modal-close-btn" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
             </div>
-            <div class="p-6 grow overflow-y-auto space-y-4" id="modal-checkbox-list"></div>
+            <div class="p-6 flex-grow overflow-y-auto space-y-4" id="modal-checkbox-list"></div>
             <div class="p-6 border-t bg-gray-50 rounded-b-lg">
                 <div class="flex flex-col gap-2"><button id="modal-add-btn"
                         class="w-full bg-blue-900 text-white font-semibold py-3 rounded-lg">Add
@@ -400,7 +400,7 @@
                     const input = document.createElement('input');
                     input.type = 'text';
                     input.name = `${currentName}[]`;
-                    input.className = 'flex-1 p-3 border border-gray-300 rounded-md shadow-xs focus:ring-2 focus:ring-indigo-500';
+                    input.className = 'flex-1 p-3 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-indigo-500';
                     input.placeholder = 'Enter value';
                     input.setAttribute('aria-label', `${button.dataset.parentName.replaceAll('_', ' ')} item`);
                     const removeItemBtn = document.createElement('button');
@@ -478,7 +478,7 @@
                         label.className = 'flex items-center cursor-pointer p-2 rounded-md hover:bg-gray-100';
                         const checkbox = document.createElement('input');
                         checkbox.type = 'checkbox';
-                        checkbox.className = 'h-5 w-5 text-indigo-600 border-gray-400 rounded-sm';
+                        checkbox.className = 'h-5 w-5 text-indigo-600 border-gray-400 rounded';
                         checkbox.value = name;
                         const text = document.createElement('span');
                         text.className = 'ml-3 text-lg text-gray-800';
