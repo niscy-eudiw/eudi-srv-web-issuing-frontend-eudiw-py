@@ -622,3 +622,43 @@ class TestSessionTrail:
         with caplog.at_level(logging.INFO, logger="app.frontend"):
             _post(client, "/internal_error", {"error": "e", "error_code": "E"})
         assert "Session ID" not in caplog.text
+
+
+class TestConsentImages:
+    """Image attributes are shown as images, at any nesting level."""
+
+    PAGE = "/display_authorization"
+    NAMES = (
+        "portrait",
+        "picture",
+        "image",
+        "signature_usual_mark",
+        "signature_usual_mark_issuing_officer",
+        "issuing_authority_logo",
+    )
+
+    def _page(self, client, **extra):
+        payload = {
+            "redirect_url": f"{BACKEND}/dynamic/redirect_wallet",
+            "presentation_data": {"mDL": {name: f"{name}B64" for name in self.NAMES} | {"family_name": "Doe"}},
+            **extra,
+        }
+        response = _post(client, self.PAGE, payload)
+        assert response.status_code == 200
+        return _html(response)
+
+    def test_default_image_attributes(self, client):
+        html = self._page(client)
+        for name in self.NAMES:
+            assert f'src="data:image/jpeg;base64,{name}B64"' in html
+        assert "Signature Usual Mark Issuing Officer" in html
+        assert 'data:image/jpeg;base64,Doe"' not in html
+
+    def test_backend_image_attributes(self, client):
+        html = self._page(client, image_attributes=["family_name"])
+        assert 'src="data:image/jpeg;base64,Doe"' in html
+        assert 'data:image/jpeg;base64,portraitB64"' not in html
+
+    def test_invalid_image_attributes_use_the_default(self, client):
+        html = self._page(client, image_attributes="portrait")
+        assert 'src="data:image/jpeg;base64,signature_usual_markB64"' in html

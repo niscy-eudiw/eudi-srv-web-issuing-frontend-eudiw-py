@@ -24,7 +24,7 @@ import logging
 import math
 import re
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlencode, urlsplit
 
 from flask import (
@@ -52,6 +52,16 @@ _WALLET_URL = re.compile(r"[a-z][a-z0-9+.\-]{0,31}://[A-Za-z0-9._~:/?#\[\]@!$&()
 #: backend refuses the same ones for the user-chosen credential offer URI.
 _FORBIDDEN_WALLET_SCHEMES = frozenset({"javascript", "data", "vbscript", "file", "blob", "about"})
 _QR_PREFIX = "data:image/png;base64,"
+#: Attributes shown as images on the consent page when the backend does not
+#: send ``image_attributes`` (its ``IMAGE_ATTRIBUTES``).
+_DEFAULT_IMAGE_ATTRIBUTES = (
+    "portrait",
+    "picture",
+    "image",
+    "signature_usual_mark",
+    "signature_usual_mark_issuing_officer",
+    "issuing_authority_logo",
+)
 _BASE64 = re.compile(r"[A-Za-z0-9+/=]*")
 
 #: Backend endpoint(s) each page's URLs may point to, relative to
@@ -286,6 +296,20 @@ def _qr_code(value: Optional[str]) -> Optional[str]:
     return value
 
 
+def _image_attributes(value: Any) -> Tuple[str, ...]:
+    """Names of the consent page attributes shown as images.
+
+    Args:
+        value: The payload's ``image_attributes``.
+
+    Returns:
+        ``value`` if it is a list of names, else the default names.
+    """
+    if isinstance(value, list) and all(isinstance(name, str) for name in value):
+        return tuple(value)
+    return _DEFAULT_IMAGE_ATTRIBUTES
+
+
 def _with_query(url: str, **params: Any) -> str:
     """Appends URL-encoded query parameters to a URL.
 
@@ -364,6 +388,7 @@ def display_authorization():
     return render_template(
         "dynamic/form_authorize.html",
         presentation_data=payload.get("presentation_data"),
+        image_attributes=_image_attributes(payload.get("image_attributes")),
         user_id=payload.get("session_id"),
         redirect_url=_backend_url(payload.get("redirect_url"), "display_authorization"),
     )

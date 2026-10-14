@@ -69,10 +69,10 @@
 </div>
 
 {# It's an image #}
-{% elif name in ["portrait", "issuing_authority_logo", "signature_usual_mark_issuing_officer", "image"] %}
+{% elif name in image_attributes %}
 <div class="attribute-block">
-    <p class="block text-base font-bold text-custom-gray">{{ name | title }}</p>
-    <img class="mt-1 rounded-lg shadow-md w-32 h-32 object-cover" src="data:image/jpeg;base64,{{ value }}" alt="{{ name | replace('_', ' ') | title }}">
+    <p class="font-pf block font-bold text-custom-gray">{{ name | replace('_', ' ') | title }}</p>
+    <img class="mt-1 rounded-lg shadow-md h-32 max-w-full object-contain" src="data:image/jpeg;base64,{{ value }}" alt="{{ name | replace('_', ' ') | title }}">
 </div>
 
 {# It's a simple value (string, number, etc.) #}
