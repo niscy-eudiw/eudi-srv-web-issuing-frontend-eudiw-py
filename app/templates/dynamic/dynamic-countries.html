@@ -13,7 +13,7 @@
 </head>
 <body class="font-pf">
    <!-- This is the main container that drives the sticky footer layout -->
-   <div class="mx-auto w-full max-w-screen-md flex flex-col min-h-screen">
+   <div class="mx-auto w-full max-w-(--breakpoint-md) flex flex-col min-h-screen">
       <!-- Header Content -->
       <header class="p-6">
          <p class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Test Credentials Provider</p>
@@ -23,11 +23,11 @@
       <!-- Form -->
       <form id="selectCountryForm" method="post"
          action="{{redirect_url}}/dynamic/country_selected"
-         class="flex-grow flex flex-col">
+         class="grow flex flex-col">
          <!-- Main scrolling area -->
-         <main class="flex-grow p-6">
+         <main class="grow p-6">
             <!-- Country grid -->
-            <div id="eidasCountries" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 auto-rows-[8rem]">
+            <div id="eidasCountries" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 auto-rows-32">
                {% for key, value in countries.items() %}
                <div class="relative">
                   <!-- The radio button, with jinja pre-selection -->
@@ -39,11 +39,11 @@
                      <!--flag container with fixed height as anchor -->
                      <div class="h-10 w-full flex items-center justify-center mb-1">
                         <img src="{{ url_for('static', filename='flags/' + key|lower + '.svg') }}" alt="{{ value }} Flag"
-                           class="max-w-full max-h-full w-8 h-auto object-contain shadow-sm border border-custom-gray">
+                           class="max-w-full max-h-full w-8 h-auto object-contain shadow-xs border border-custom-gray">
                      </div>
                      <!-- text container grows to fill the rest of the card. -->
-                     <div class="flex-grow flex items-center justify-center">
-                        <span class="text-center text-sm font-semibold text-gray-700 break-words">{{ value }}</span>
+                     <div class="grow flex items-center justify-center">
+                        <span class="text-center text-sm font-semibold text-gray-700 wrap-break-word">{{ value }}</span>
                      </div>
                   </label>
                </div>

@@ -4,8 +4,6 @@ FROM node:lts-slim AS node-builder
 WORKDIR /build
 
 COPY package*.json ./
-COPY tailwind.config.* ./
-COPY postcss.config.* ./
 COPY assets/ ./assets/
 COPY app/ ./app/
 

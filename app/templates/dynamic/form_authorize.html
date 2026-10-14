@@ -86,7 +86,7 @@
 
 
 <body class="bg-white">
-    <div role="main" class="mx-auto w-full max-w-screen-md p-6 flex flex-col min-h-screen">
+    <div role="main" class="mx-auto w-full max-w-(--breakpoint-md) p-6 flex flex-col min-h-screen">
 
         <!-- Header Section  -->
         <div class="space-y-2 mb-8">
@@ -98,9 +98,9 @@
         </div>
 
         <!-- The Form -->
-        <form id="authForm" method="post" action="{{redirect_url}}" class="flex-grow flex flex-col">
+        <form id="authForm" method="post" action="{{redirect_url}}" class="grow flex flex-col">
 
-            <div class="flex-grow">
+            <div class="grow">
                 <!-- The Inset Data Card -->
                 <div class="bg-gray-200 rounded-xl p-6">
                     <div class="space-y-5">
