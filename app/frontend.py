@@ -75,6 +75,8 @@ _BACKEND_PATHS = {
 PAYLOAD_JWT_MAX_AGE = 300
 PAYLOAD_JWT_LEEWAY = 60
 _JWS_SEGMENT = re.compile(r"[A-Za-z0-9_-]+")
+#: Session id as logged: the backend uses UUIDs; anything else is not echoed.
+_SESSION_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")
 
 
 class InvalidPayload(ValueError):
@@ -101,17 +103,33 @@ def _load_payload() -> Dict[str, Any]:
         InvalidPayload: If it is missing or not a JSON object.
     """
     if CONFIGURATION.get("payload_key"):
-        return _verify_payload_jwt(request.form.get("payload_jwt"))
-    raw = request.form.get("payload")
-    if not raw:
-        raise InvalidPayload("Payload not found")
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise InvalidPayload("Invalid JSON payload") from e
-    if not isinstance(payload, dict):
-        raise InvalidPayload("Invalid JSON payload")
+        payload = _verify_payload_jwt(request.form.get("payload_jwt"))
+    else:
+        raw = request.form.get("payload")
+        if not raw:
+            raise InvalidPayload("Payload not found")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise InvalidPayload("Invalid JSON payload") from e
+        if not isinstance(payload, dict):
+            raise InvalidPayload("Invalid JSON payload")
+    _log_session(payload)
     return payload
+
+
+def _log_session(payload: Dict[str, Any]) -> None:
+    """Logs the page with the payload's ``session_id``, as the backend and
+    authorization server tag their logs, so an issuance can be followed
+    across the components. Pages without a session (credential offer,
+    revocation) are not logged.
+    """
+    session_id = payload.get("session_id")
+    if session_id is None:
+        return
+    if not isinstance(session_id, str) or not _SESSION_ID.fullmatch(session_id):
+        session_id = "<invalid>"
+    logger.info(", Session ID: %s, Page: %s", session_id, _route())
 
 
 def _verify_payload_jwt(token: Optional[str]) -> Dict[str, Any]:

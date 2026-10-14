@@ -5,6 +5,7 @@ rejected or rendered harmless.
 """
 
 import json
+import logging
 import re
 
 import pytest
@@ -603,3 +604,21 @@ class TestCleanup:
         import app as app_module
 
         assert not hasattr(app_module, "DebuggedApplication")
+
+
+class TestSessionTrail:
+    def test_page_is_logged_with_the_session_id(self, client, caplog):
+        with caplog.at_level(logging.INFO, logger="app.frontend"):
+            _post(client, "/display_countries", {"countries": {}, "session_id": "0b9e6c1e-2f4a-4d1b-9c3e-7a1f2b3c4d5e"})
+        assert ", Session ID: 0b9e6c1e-2f4a-4d1b-9c3e-7a1f2b3c4d5e, Page: /display_countries" in caplog.text
+
+    def test_unsafe_session_id_is_not_echoed(self, client, caplog):
+        with caplog.at_level(logging.INFO, logger="app.frontend"):
+            _post(client, "/display_countries", {"countries": {}, "session_id": "x\r\nFORGED log line"})
+        assert "FORGED" not in caplog.text
+        assert ", Session ID: <invalid>, Page: /display_countries" in caplog.text
+
+    def test_pages_without_a_session_are_not_logged(self, client, caplog):
+        with caplog.at_level(logging.INFO, logger="app.frontend"):
+            _post(client, "/internal_error", {"error": "e", "error_code": "E"})
+        assert "Session ID" not in caplog.text
