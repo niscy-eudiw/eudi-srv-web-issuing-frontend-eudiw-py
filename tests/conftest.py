@@ -21,7 +21,6 @@ frontend_id: "fe1"
 backend_url: "https://backend.test"
 oauth_url: "https://fe.test/oidc"
 backend_api_key: "{'k' * 40}"
-wallet_https_hosts: ["tester.test"]
 """
     )
 os.makedirs(os.path.join(_CONFIG_DIR, "logs"), exist_ok=True)

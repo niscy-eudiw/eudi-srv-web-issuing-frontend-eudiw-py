@@ -8,7 +8,8 @@ such a form, so every value is treated as untrusted either way:
 
 * URLs the page posts or navigates to must be the backend endpoint the page
   is meant for (:func:`_backend_url`, :data:`_BACKEND_PATHS`);
-* wallet links must use a wallet scheme, or https to an allowed host
+* wallet links must be ``scheme://...`` links whose scheme cannot run code,
+  the same rule the backend applies to the credential offer URI
   (:func:`_wallet_url`);
 * QR codes must be PNG data URIs (:func:`_qr_code`).
 
@@ -47,11 +48,9 @@ logger = logging.getLogger(__name__)
 #: Wallet / offer link: ``scheme://...`` with no character that could leave
 #: an HTML attribute or a URL.
 _WALLET_URL = re.compile(r"[a-z][a-z0-9+.\-]{0,31}://[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%\-]{0,8000}")
-#: Wallet link schemes (credential offer and OpenID4VP deeplinks). ``https``
-#: links are only accepted to the backend or to ``wallet_https_hosts``.
-_WALLET_SCHEMES = frozenset(
-    {"openid-credential-offer", "haip-vci", "eudi-openid4ci", "openid4vp", "eudi-openid4vp", "haip", "mdoc-openid4vp"}
-)
+#: Schemes that run code or read local data when a link is opened; the
+#: backend refuses the same ones for the user-chosen credential offer URI.
+_FORBIDDEN_WALLET_SCHEMES = frozenset({"javascript", "data", "vbscript", "file", "blob", "about"})
 _QR_PREFIX = "data:image/png;base64,"
 _BASE64 = re.compile(r"[A-Za-z0-9+/=]*")
 
@@ -228,6 +227,9 @@ def _origin(url: str) -> str:
 def _wallet_url(value: Optional[str]) -> Optional[str]:
     """Accepts a wallet link (deeplink or https).
 
+    The credential offer URI prefix is chosen by the user on the credential
+    offer page, so any scheme the backend accepts is allowed here too.
+
     Args:
         value: Link from the payload; ``None`` is passed through.
 
@@ -235,23 +237,16 @@ def _wallet_url(value: Optional[str]) -> Optional[str]:
         ``value``.
 
     Raises:
-        InvalidPayload: If it uses unsafe characters, a scheme other than
-            :data:`_WALLET_SCHEMES` or ``https``, or is an https link to a
-            host other than the backend and ``wallet_https_hosts``.
+        InvalidPayload: If it uses unsafe characters or a scheme in
+            :data:`_FORBIDDEN_WALLET_SCHEMES`.
     """
     if value is None:
         return None
     if not isinstance(value, str) or not _WALLET_URL.fullmatch(value):
         raise InvalidPayload("Invalid wallet URL")
-    scheme = value.split(":", 1)[0]
-    if scheme in _WALLET_SCHEMES:
-        return value
-    if scheme == "https":
-        parts = urlsplit(value)
-        hosts = {host.lower() for host in CONFIGURATION.get("wallet_https_hosts") or []}
-        if _origin(value) in _backend_origins() or (parts.username is None and parts.hostname in hosts):
-            return value
-    raise InvalidPayload("Invalid wallet URL")
+    if value.split(":", 1)[0] in _FORBIDDEN_WALLET_SCHEMES:
+        raise InvalidPayload("Invalid wallet URL")
+    return value
 
 
 def _qr_code(value: Optional[str]) -> Optional[str]:

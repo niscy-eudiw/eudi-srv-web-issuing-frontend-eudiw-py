@@ -34,11 +34,5 @@ backend_api_key: "change-me" # Must match backend_api_key in the backend config.
 # Default unset. SECRET; at least 32 characters (the backend refuses shorter).
 # payload_key: "change-me"
 
-# Hosts an https wallet link on the QR code pages may point to (e.g. the wallet
-# tester, the backend's wallet_tester_url); the backend origin is always allowed.
-# List of host names; default none. Deep links (openid-credential-offer,
-# openid4vp, eudi-openid4vp, haip, mdoc-openid4vp) are always allowed.
-# wallet_https_hosts: ["tester.issuer.eudiw.dev"]
-
 # Maximum request body size in bytes (default 1 MiB).
 # max_content_length: 1048576

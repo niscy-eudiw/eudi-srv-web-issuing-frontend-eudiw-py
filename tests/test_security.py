@@ -425,7 +425,7 @@ class TestStartup:
             app_module._fetch_backend_metadata("")
 
 
-class TestWalletLinkAllowlist:
+class TestWalletLinks:
     PAGE = "/display_revocation_qr_code"
 
     def _post_link(self, client, link):
@@ -441,28 +441,30 @@ class TestWalletLinkAllowlist:
             "eudi-openid4vp://verifier?request_uri=x",
             "haip://?request_uri=x",
             "mdoc-openid4vp://?request_uri=x",
+            "my-test-wallet://credential_offer?credential_offer=x",
             "https://tester.test/credential_offer",
+            "https://wallet.example/credential_offer",
             "https://backend.test/x",
         ],
     )
-    def test_wallet_schemes_and_allowed_hosts(self, client, link):
+    def test_wallet_links_are_accepted(self, client, link):
         assert self._post_link(client, link).status_code == 200
 
     @pytest.mark.parametrize(
         "link",
         [
-            "https://attacker.test/offer",
-            "https://tester.test@attacker.test/offer",
-            "https://user@tester.test/offer",
-            "http://tester.test/offer",
-            "http://backend.test/x",
-            "intent://x#Intent;end",
-            "ms-settings://x",
-            "ftp://tester.test/x",
+            "javascript://x%0aalert(1)",
+            "data://text/html,x",
             "vbscript://x",
+            "file:///etc/passwd",
+            "blob://x",
+            "about://blank",
+            "openid-credential-offer://x\"><script>",
+            "openid-credential-offer://x y",
+            "no-scheme",
         ],
     )
-    def test_other_schemes_and_hosts_are_rejected(self, client, link):
+    def test_code_running_schemes_and_unsafe_characters_are_rejected(self, client, link):
         assert self._post_link(client, link).status_code == 400
 
 
