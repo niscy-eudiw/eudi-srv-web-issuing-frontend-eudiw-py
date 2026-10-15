@@ -39,6 +39,7 @@ from flask import Flask, g, jsonify, render_template, request, send_from_directo
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 from typing import Dict, Any
+from urllib.parse import urlencode
 
 from app.app_config.logging_config import configure_logging
 
@@ -191,7 +192,9 @@ def create_app(test_config=None):
             "misc/initial_page.html",
             oidc=f"{CONFIGURATION['service_url']}/.well-known/openid-credential-issuer",
             service_url=CONFIGURATION["service_url"],
-            revocation_url=f"{CONFIGURATION['backend_url']}/revocation/revocation_choice",
+            # The backend lists only the credentials this frontend publishes.
+            revocation_url=f"{CONFIGURATION['backend_url']}/revocation/revocation_choice?"
+            + urlencode({"frontend_id": CONFIGURATION["frontend_id"]}),
         )
 
     @app.route("/favicon.ico")

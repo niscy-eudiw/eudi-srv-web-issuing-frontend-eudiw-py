@@ -465,7 +465,11 @@ def display_revocation_authorization():
         display_list=payload.get("display_list"),
         revocation_identifier=payload.get("revocation_identifier"),
         redirect_url=_backend_url(payload.get("redirect_url"), "display_revocation_authorization"),
-        revocation_choice_url=_backend_url(payload.get("revocation_choice_url"), "revocation_choice_url"),
+        # Back to this frontend's selection list (validated without the query).
+        revocation_choice_url=_with_query(
+            _backend_url(payload.get("revocation_choice_url"), "revocation_choice_url"),
+            frontend_id=CONFIGURATION["frontend_id"],
+        ),
     )
 
 

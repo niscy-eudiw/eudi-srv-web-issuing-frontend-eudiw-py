@@ -92,7 +92,11 @@ class TestJavascriptUrls:
         html = _html(response)
         assert response.status_code == 200
         assert "onclick=\"window.location" not in html
-        assert f'href="{BACKEND}/revocation/revocation_choice"' in html
+        assert f'href="{BACKEND}/revocation/revocation_choice?frontend_id=fe1"' in html
+
+    def test_landing_page_revocation_link_names_this_frontend(self, client):
+        html = client.get("/").get_data(as_text=True)
+        assert f"{BACKEND}/revocation/revocation_choice?frontend_id=fe1" in html
 
     @pytest.mark.parametrize(
         "field, value",
