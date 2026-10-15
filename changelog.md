@@ -50,9 +50,9 @@ _06 Oct 2026_
 
 ### Changed
 - Templates share one page frame, `layout/base.html` (head, header, main container), with `layout/_footer.html`, `openid/_credential_select.html` (credential checkboxes, buttons, submit script), `openid/_qr_code.html` and `openid/_oid4vp_qr_code.html` (the PID login and revocation QR pages differ only in three URLs). The seven pages SonarCloud reported as duplicated (13.6% of the lines) keep their names and output; the error and start pages gain the viewport meta tag, and an unused `#check` script is gone from the QR pages.
-- Boolean toggles in the attribute form: the switch's own label carries the field name (screen-reader text); the visible title is no longer a second label. The reviewed CSRF (S4502) and CORS (S5122) hotspots in `app/__init__.py` are marked `# NOSONAR`.
+- Boolean toggles in the attribute form: the switch's own label carries the field name (screen-reader text); the visible title is no longer a second label.
 - SonarCloud reliability: the PAR relay reads wallet headers with `.get()` and returns a `Response` on every path (it mixed 3- and 2-tuples); the unauthenticated-payload handler returns its 400 as a plain `(page, 400)` tuple. Templates: labels tied to their controls, `alt` text on images, no `accesskey`, headings with accessible text.
-- The PAR relay no longer logs the wallet's `client_id` (SonarCloud log injection; the authorization server logs the authenticated client). Comments at `create_app` and the CORS setup record why the CSRF (S4502) and CORS (S5122) hotspots are safe.
+- The PAR relay no longer logs the wallet's `client_id` (SonarCloud log injection; the authorization server logs the authenticated client). Comments at `create_app` and the CORS setup record why the CSRF (S4502) and CORS (S5122) hotspots are safe, and both are marked `# NOSONAR`.
 - `requests` 2.32.3 → 2.34.2 (PYSEC-2026-1872, PYSEC-2026-2275), `werkzeug` 3.1.6 → 3.1.9 (CVE-2026-102598), `Flask-Cors` 6.0.2 → 6.0.5, matching the backend.
 - Removed requirements nothing imports: `Flask-Session`, `flask_api`, `validators`, `jsonschema` and `config`.
 - Display payloads can be authenticated: with the new `payload_key` configuration the `/display_*` pages and `/internal_error` require `payload_jwt`, an HS256 JWT from the backend (claims `payload`, `aud` = `frontend_id`, `iat`, `exp`, lifetime at most 300 s, 60 s clock skew), and use its `payload` claim; the plain `payload` field is ignored. A missing or invalid token gets `400` with a generic page. Without `payload_key` a warning is logged at start-up.
@@ -63,8 +63,13 @@ _06 Oct 2026_
 - Content-Security-Policy: `script-src` no longer allows `'unsafe-inline'`; inline scripts carry a per-request nonce and inline event handlers moved to `static/scripts/page-actions.js`. `style-src` is `'self' 'unsafe-inline'` instead of any https origin.
 - `/.well-known/oauth-authorization-server` serves the backend's OAuth authorization server metadata instead of the OpenID configuration.
 - Removed the unused templates `misc/eidas_fail.html` and `dynamic/pt_url.html` and the unused `werkzeug.debug` import.
+- The revocation link on the start page and the "back" link of the revocation consent page pass `frontend_id`, so the backend lists only the credentials this frontend publishes.
+- The consent page shows as images the attributes the backend names in `image_attributes` (default: `portrait`, `picture`, `image`, `signature_usual_mark`, `signature_usual_mark_issuing_officer`, `issuing_authority_logo`).
+- Pages posted by the backend log `, Session ID: <id>, Page: <route>` like the backend and authorization server, so an issuance can be followed across the components; a session id that is not a plain token is logged as `<invalid>`.
 
 ### Fixed
 - The PID login page polled `<service_url>pid_authorization` (missing `/`, on the frontend) and then opened `/getpidoid4vp` on the frontend; it now polls `<backend_url>/pid_authorization` and opens `<backend_url>/getpidoid4vp`.
 - `Accept: application/jwt` on `/.well-known/openid-credential-issuer` without signed metadata returns `406` instead of `500`.
 - The 404 handler logs one line instead of a stack trace.
+- The "back" links of the PID login and revocation QR pages pointed to frontend paths that do not exist; they go to the backend's `/auth_method_choice` and `/revocation/revocation_choice`.
+- QR codes were rendered at the backend's 2-3 px per module, too small for some phones to scan; they are scaled to 200-280 px with `image-rendering: pixelated`.
