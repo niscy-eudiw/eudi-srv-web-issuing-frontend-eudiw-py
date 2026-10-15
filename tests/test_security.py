@@ -579,6 +579,14 @@ class TestCleanup:
         assert 'url: "https://backend.test/pid_authorization"' in html
         assert 'window.location.replace("https://backend.test/getpidoid4vp" + ' in html
 
+    def test_qr_code_back_links_open_the_backend(self, client):
+        # A relative link would resolve on this frontend, which has no such page.
+        html = _html(_post(client, "/display_pid_login", {"deeplink_url": "eudi-openid4vp://v", "qr_img_base64": QR, "transaction_id": "t"}))
+        assert 'href="https://backend.test/auth_method_choice"' in html
+        payload = {"url_data": "eudi-openid4vp://v", "qrcode": QR, "presentation_id": "t", "redirect_url": f"{BACKEND}/"}
+        html = _html(_post(client, "/display_revocation_qr_code", payload))
+        assert 'href="https://backend.test/revocation/revocation_choice"' in html
+
     def test_oauth_authorization_server_metadata(self, client):
         assert client.get("/.well-known/oauth-authorization-server").get_json() == {"issuer": "https://backend.test"}
         assert client.get("/.well-known/openid-configuration").get_json() == {"issuer": "https://fe.test"}

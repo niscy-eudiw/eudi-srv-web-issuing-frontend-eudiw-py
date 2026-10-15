@@ -1,5 +1,5 @@
 {#- Revocation: the wallet presents the credential to revoke (OID4VP). -#}
-{% set back_href = "revocation_choice" %}
+{% set back_href = redirect_url ~ 'revocation/revocation_choice' %}
 {% set poll_url = redirect_url ~ 'pid_authorization' %}
 {% set done_url = redirect_url ~ 'revocation/getoid4vp' %}
 {% extends "openid/_oid4vp_qr_code.html" %}

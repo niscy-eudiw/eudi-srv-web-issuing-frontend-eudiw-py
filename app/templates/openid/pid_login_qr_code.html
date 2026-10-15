@@ -1,5 +1,5 @@
 {#- PID login: the wallet presents its PID (OID4VP). -#}
-{% set back_href = "auth_choice" %}
+{% set back_href = backend_url ~ '/auth_method_choice' %}
 {% set poll_url = backend_url ~ '/pid_authorization' %}
 {% set done_url = backend_url ~ '/getpidoid4vp' %}
 {% extends "openid/_oid4vp_qr_code.html" %}
